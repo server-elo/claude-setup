@@ -1,0 +1,28 @@
+# Sofia Local - 100% Free & Open Source Voice AI
+# Zero cloud costs, everything runs locally
+# German Hotel Receptionist Edition
+
+# Voice Processing (Local)
+vosk>=0.3.45                   # Speech-to-Text (Vosk - better multilingual)
+kokoro-onnx>=0.4.7            # Text-to-Speech (Kokoro)
+fastrtc>=0.0.19               # Real-time voice processing
+pyaudio                        # Console audio I/O
+webrtcvad                      # Voice activity detection
+
+# LLM (Local)
+ollama>=0.4.7                  # Local LLM interface
+
+# Console & Terminal
+loguru>=0.7.3                  # Better logging
+python-dotenv                  # Environment config
+
+# Core utilities
+numpy                          # Audio processing
+python-dateutil                # Date/time utilities
+requests                       # HTTP requests
+aiohttp                        # Async HTTP
+soundfile                      # Audio file I/O
+wave                           # WAV file handling
+
+# Async support
+asyncio                        # Async operations

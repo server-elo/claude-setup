@@ -1,0 +1,5 @@
+# Auto-cached files (accessed 3+ times per session)
+~/Desktop/elvi/sofia-pers/agent.py
+~/Desktop/elvi/sofia-pers/requirements.txt
+~/.claude/CLAUDE.md
+~/.zshrc

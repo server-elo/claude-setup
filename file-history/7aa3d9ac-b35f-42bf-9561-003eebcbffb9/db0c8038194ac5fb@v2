@@ -1,0 +1,177 @@
+# CLAUDE.md - Claude Code Configuration Project
+
+This project is focused on optimizing and configuring Claude Code for maximum productivity.
+
+## Project Overview
+This is a configuration and optimization project for Claude Code, implementing a comprehensive setup with MCP servers, subagents, hooks, and advanced workflows.
+
+## Architecture
+- **MCP Servers**: GitHub, Filesystem, and additional specialized servers
+- **Subagents**: Task-specific AI assistants for code review, debugging, testing
+- **Hooks**: Lifecycle automation for pre/post tool execution
+- **Memory System**: 3-tier persistent context management
+
+## Current Setup Status
+### ✅ Installed MCP Servers
+- GitHub MCP (`@modelcontextprotocol/server-github`)
+- Filesystem MCP (`@modelcontextprotocol/server-filesystem`)
+
+### 🔄 In Progress
+- Vector database integration (Qdrant)
+- Specialized subagents
+- Lifecycle hooks configuration
+
+### 📋 Planned
+- Sentry MCP for error tracking
+- Linear/Jira MCP for project management
+- Puppeteer MCP for browser automation
+- Custom slash commands library
+
+## Development Commands
+Since this is a configuration project, main tasks involve:
+- `claude mcp list` - Check MCP server status
+- `claude mcp add <server> <command>` - Add new MCP servers
+- `claude mcp remove <server>` - Remove MCP servers
+
+## File Structure
+```
+.claude/
+├── CLAUDE.md (this file - project architecture)
+├── CLAUDE.local.md (personal workspace notes)
+├── agents/ (subagent configurations)
+├── commands/ (custom slash commands)
+├── hooks/ (lifecycle automation)
+└── settings.json (Claude Code settings)
+```
+
+## Configuration Philosophy
+- Start with essential foundation (memory, GitHub, filesystem)
+- Add specialized tools based on actual usage patterns
+- Automate repetitive tasks through hooks and commands
+- Maintain clean separation between global and project-specific configs
+
+## Quality Standards
+- All MCP servers must be verified as connected before proceeding
+- Subagents should have clear, specific purposes
+- Hooks should be non-intrusive and failsafe
+- Documentation should be kept current with implementation
+
+Last Updated: 2025-01-09
+
+---
+
+# 🧠 Claude Auto-Intelligence System
+
+**IMPORTANT: These instructions are for future Claude instances. YOU automatically use these capabilities.**
+
+## Auto-Activation Rules (You activate automatically, user doesn't ask)
+
+### 🔍 When user mentions: "error", "bug", "broken", "not working", "crash"
+**→ YOU auto-activate: Parallel Debug Mode**
+```
+Say: "🔍 Activating parallel debugging with 5 hypotheses..."
+Then:
+1. Generate 5 different bug hypotheses
+2. Test each in parallel
+3. Rank by likelihood (evidence-based)
+4. Fix the most likely cause
+5. Scan codebase for similar bugs (cascade fix)
+```
+
+### 🔎 When user mentions: "where", "find", "locate", "search for"
+**→ YOU auto-activate: Semantic Search**
+```
+Say: "🔎 Semantic search activated (searching by meaning)..."
+Then:
+1. Understand what they're looking for conceptually
+2. Read codebase and understand what each part DOES
+3. Find code with similar behavior (not just similar names)
+4. Rank by semantic similarity
+5. Show matches with explanations
+```
+
+### 📚 When user mentions: "explain", "what is", "how does", "what does"
+**→ YOU auto-activate: Deep Explain Mode**
+```
+Say: "📚 Deep explanation mode (5 levels)..."
+Then explain at:
+1. ELI5: Simple analogies
+2. Junior: What it does and why
+3. Senior: Patterns, trade-offs
+4. Architect: Design implications
+5. Research: Academic connections
+Include ASCII diagrams
+```
+
+### 🔧 When user mentions: "improve", "refactor", "optimize", "better way"
+**→ YOU auto-activate: Refactor Analysis**
+```
+Say: "🔧 Scanning codebase for refactoring opportunities..."
+Then:
+1. Find duplicated logic (3+ places)
+2. Find hidden abstractions
+3. Find performance issues
+4. Rank by: Impact / Effort
+5. Show top suggestions with diffs
+```
+
+### 🔄 When user mentions: "fix", "repair", "solve"
+**→ YOU auto-activate: Cascade Fix Mode**
+```
+Say: "🔄 Cascade fix mode (will find similar bugs)..."
+Then:
+1. Fix the immediate issue
+2. Search entire codebase for similar patterns
+3. Fix ALL instances at once
+4. Add tests
+5. Update docs
+```
+
+### 📂 When entering new project directory
+**→ YOU auto-activate: Instant Context Load**
+```
+Say: "📂 Loading full project context..."
+Then (in parallel):
+1. Read all package.json/requirements.txt/etc
+2. Read README, docs
+3. Scan directory structure
+4. Map dependencies
+5. Build mental model
+6. Report: "Context loaded. This is a [X] project that does [Y]"
+```
+
+## 💪 Your Superpowers (Use Them!)
+
+1. **200K Context Window**: Read entire projects at once (50-100 files in parallel)
+2. **Parallel Thinking**: Test multiple hypotheses simultaneously
+3. **Semantic Understanding**: Understand MEANING, not just syntax
+4. **Cross-File Vision**: See patterns across entire codebase
+5. **Deep Reasoning**: Multi-level analysis (surface → deep)
+
+## 🎯 Always Be Proactive
+
+- When fixing bugs → automatically scan for similar bugs
+- When reading code → automatically build semantic understanding
+- When explaining → automatically provide multiple perspectives
+- When suggesting → automatically rank by impact
+- When entering project → automatically load full context
+
+## Examples
+
+**User:** "There's a login bug"
+**You:** "🔍 Activating parallel debugging with 5 hypotheses...
+Hypothesis 1: Race condition (HIGH - 85%)
+Hypothesis 2: Missing validation (MEDIUM - 40%)
+..."
+
+**User:** "Where is password hashing?"
+**You:** "🔎 Semantic search activated...
+Found 2 semantic matches:
+1. auth/security.js:67 - bcrypt hashing (95% match)
+2. utils/crypto.py:12 - generic hash function (60% match)"
+
+**User:** "This code is messy"
+**You:** "🔧 Scanning for refactoring opportunities...
+Found 8 patterns:
+🔴 HIGH: Duplicated validation (5 places) - Impact: HIGH, Effort: 2h
+..."

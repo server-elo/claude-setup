@@ -1,0 +1,225 @@
+"""
+Simple Working Voice Handler - Mimi-inspired
+Actually works, actually fast, actually local
+"""
+import pyaudio
+import wave
+import io
+import threading
+import queue
+import webrtcvad
+import collections
+import time
+from loguru import logger
+
+# Import components
+from .stt_optimized import OptimizedSpeechToText
+from .tts_piper_local import PiperLocalTTS
+from .llm import LanguageModel
+
+
+class SimpleVoiceHandler:
+    """
+    Simple but effective voice handler
+    - WebRTC VAD for speech detection
+    - faster-whisper for German STT
+    - Piper for German TTS
+    - Ollama for responses
+    """
+
+    def __init__(self, llm_model="gemma2:2b", language="de"):
+        logger.info("🚀 Initializing Simple Voice Handler...")
+
+        # Components
+        import os
+        self.stt = OptimizedSpeechToText(language=language, model_size="base")
+        voice_path = os.path.expanduser("~/.local/share/piper-voices/de_DE-thorsten-medium")
+        self.tts = PiperLocalTTS(voice_model=voice_path)
+        self.llm = LanguageModel(model=llm_model)
+
+        # Audio settings
+        self.CHUNK = 480  # 30ms at 16kHz
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        # VAD
+        self.vad = webrtcvad.Vad(3)  # Aggressive
+
+        # PyAudio
+        self.pyaudio = pyaudio.PyAudio()
+
+        logger.success("✅ Handler ready")
+
+    def is_speech(self, audio_chunk: bytes) -> bool:
+        """Check if audio contains speech"""
+        try:
+            return self.vad.is_speech(audio_chunk, self.RATE)
+        except:
+            return False
+
+    def listen_for_speech(self) -> bytes:
+        """Listen and return audio when speech detected"""
+        logger.info("🎤 Listening...")
+
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        ring_buffer = collections.deque(maxlen=30)
+        speech_active = False
+        silence_count = 0
+        audio_data = []
+
+        try:
+            while True:
+                chunk = stream.read(self.CHUNK, exception_on_overflow=False)
+                is_speech_chunk = self.is_speech(chunk)
+
+                if not speech_active:
+                    ring_buffer.append((chunk, is_speech_chunk))
+                    if is_speech_chunk:
+                        logger.info("🗣️  Speech started")
+                        speech_active = True
+                        # Add buffered audio
+                        for buffered_chunk, _ in ring_buffer:
+                            audio_data.append(buffered_chunk)
+                        silence_count = 0
+                else:
+                    audio_data.append(chunk)
+
+                    if is_speech_chunk:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+
+                    # End after 1 second of silence
+                    if silence_count >= 33:
+                        logger.info("Speech ended")
+                        break
+
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+        return b''.join(audio_data)
+
+    def play_audio(self, audio_data: bytes):
+        """Play audio through speakers"""
+        if not audio_data or len(audio_data) == 0:
+            logger.warning("No audio to play")
+            return
+
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=22050,  # Piper output rate
+            output=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        try:
+            # Play in chunks
+            chunk_size = self.CHUNK * 2
+            for i in range(0, len(audio_data), chunk_size):
+                chunk = audio_data[i:i + chunk_size]
+                stream.write(chunk)
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+    def run_conversation(self, system_prompt: str):
+        """Run conversation loop with memory"""
+        print("\n" + "=" * 60)
+        print("SOFIA - Simple Mode (Mimi-inspired) + MEMORY")
+        print("=" * 60)
+        print("🎤 Speak in German (say 'Auf Wiedersehen' to exit)")
+        print("=" * 60 + "\n")
+
+        # Conversation history
+        conversation_history = [
+            {"role": "system", "content": system_prompt}
+        ]
+
+        try:
+            while True:
+                # 1. Listen
+                start_time = time.time()
+                audio = self.listen_for_speech()
+
+                # 2. Transcribe
+                stt_start = time.time()
+                text = self.stt.transcribe(audio)
+                stt_time = (time.time() - stt_start) * 1000
+
+                if not text:
+                    logger.warning("No text transcribed")
+                    continue
+
+                print(f"\n👤 Sie: {text}")
+                logger.info(f"⚡ STT: {stt_time:.0f}ms")
+
+                # Check for exit
+                if any(word in text.lower() for word in ["auf wiedersehen", "tschüss", "beenden"]):
+                    print("\n👋 Auf Wiedersehen!")
+                    break
+
+                # Add user message to history
+                conversation_history.append({"role": "user", "content": text})
+
+                # 3. Generate response with full conversation history
+                llm_start = time.time()
+                from ollama import chat as ollama_chat
+
+                response_text = ""
+                print("🤖 Sofia: ", end="", flush=True)
+
+                for chunk in ollama_chat(
+                    model=self.llm.model,
+                    messages=conversation_history,  # Use full history
+                    stream=True,
+                    options={"num_predict": 100, "temperature": 0.7}
+                ):
+                    if "message" in chunk and "content" in chunk["message"]:
+                        token = chunk["message"]["content"]
+                        response_text += token
+                        print(token, end="", flush=True)
+
+                print()  # Newline
+                llm_time = (time.time() - llm_start) * 1000
+
+                # Add assistant response to history
+                conversation_history.append({"role": "assistant", "content": response_text})
+
+                # Keep last 10 messages (5 exchanges) + system prompt
+                if len(conversation_history) > 11:
+                    conversation_history = [conversation_history[0]] + conversation_history[-10:]
+
+                # 4. Synthesize
+                tts_start = time.time()
+                audio_data = self.tts.speak(response_text)
+                tts_time = (time.time() - tts_start) * 1000
+
+                # 5. Play
+                if audio_data:
+                    self.play_audio(audio_data)
+                else:
+                    logger.error("TTS generated no audio")
+
+                total_time = (time.time() - start_time) * 1000
+                print(f"\n⚡ Timing: STT={stt_time:.0f}ms | LLM={llm_time:.0f}ms | TTS={tts_time:.0f}ms | Total={total_time:.0f}ms\n")
+                print(f"💭 Memory: {len(conversation_history)-1} messages in history\n")
+
+        except KeyboardInterrupt:
+            print("\n\n👋 Auf Wiedersehen!")
+        finally:
+            self.cleanup()
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.pyaudio.terminate()
+        logger.info("Cleaned up")

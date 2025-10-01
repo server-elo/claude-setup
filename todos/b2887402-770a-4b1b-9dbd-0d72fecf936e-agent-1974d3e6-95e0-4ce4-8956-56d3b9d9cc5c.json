@@ -1,0 +1,22 @@
+[
+  {
+    "content": "Check if Ollama is running locally",
+    "status": "in_progress",
+    "activeForm": "Checking if Ollama is running locally"
+  },
+  {
+    "content": "Configure Sofia to use Ollama instead of Google",
+    "status": "pending",
+    "activeForm": "Configuring Sofia to use Ollama"
+  },
+  {
+    "content": "Add local TTS/STT services",
+    "status": "pending",
+    "activeForm": "Adding local TTS/STT services"
+  },
+  {
+    "content": "Test Sofia with Ollama configuration",
+    "status": "pending",
+    "activeForm": "Testing Sofia with Ollama configuration"
+  }
+]

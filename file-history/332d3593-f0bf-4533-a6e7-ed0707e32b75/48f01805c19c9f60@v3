@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""
+SOFIA LOCAL - 100% Free & Open Source Voice AI
+Zero cloud costs, everything runs locally
+
+Usage:
+    python agent.py console  → Terminal voice interaction (no browser)
+    python agent.py dev      → Browser voice interaction (web UI)
+
+Technology:
+    - STT: Moonshine (HuggingFace)
+    - TTS: Kokoro ONNX
+    - LLM: Ollama (gemma2:2b - free, fast, local)
+    - Console: PyAudio (direct mic/speaker)
+    - Browser: FastRTC + Gradio
+
+Author: Built with Claude Code
+"""
+import sys
+import os
+from loguru import logger
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from voice.console_handler import ConsoleVoiceHandler
+from voice.console_handler_streaming import StreamingConsoleVoiceHandler
+from voice.console_handler_vad import VADConsoleVoiceHandler
+from voice.console_handler_livekit import LiveKitLatencyHandler
+from voice.console_handler_simple import SimpleVoiceHandler  # MOSHI-INSPIRED
+from voice.browser_handler import BrowserVoiceHandler
+from agent.prompts import AGENT_INSTRUCTION
+
+def print_banner():
+    """Print Sofia banner"""
+    banner = """
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   ███████╗ ██████╗ ███████╗██╗ █████╗                    ║
+║   ██╔════╝██╔═══██╗██╔════╝██║██╔══██╗                   ║
+║   ███████╗██║   ██║█████╗  ██║███████║                   ║
+║   ╚════██║██║   ██║██╔══╝  ██║██╔══██║                   ║
+║   ███████║╚██████╔╝██║     ██║██║  ██║                   ║
+║   ╚══════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝                   ║
+║                                                           ║
+║     GERMAN DENTAL RECEPTIONIST - LOW LATENCY VAD         ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+
+Speech-to-Text:  faster-whisper - German (4x faster)
+Text-to-Speech:  Piper Thorsten - 100% Local (Moshi-inspired)
+Language Model:  Ollama gemma2:2b - STREAMING
+Mode:            RESEARCH-BACKED - Target <1s latency
+Cost:            $0.00 - 100% Free & Private
+"""
+    print(banner)
+
+def print_usage():
+    """Print usage information"""
+    usage = """
+USAGE:
+    python agent.py console  → Automatic speech detection (no buttons)
+    python agent.py dev      → Browser-based voice (web UI)
+
+EXAMPLES:
+    python agent.py console  # Just speak - automatic detection
+    python agent.py dev      # Open browser with mic button
+
+REQUIREMENTS:
+    1. Ollama must be running: ollama serve
+    2. Model must be pulled: ollama pull gemma2:2b
+    3. PyAudio installed for console mode
+
+MODES EXPLAINED:
+    CONSOLE: LIVEKIT-LEVEL LATENCY with full streaming
+             5 parallel threads for minimum latency
+             Sentence-by-sentence TTS generation
+             Just speak - automatic detection
+             Say "Auf Wiedersehen" to end
+
+    BROWSER: Opens Gradio web UI automatically
+             Click microphone button to talk
+             Full real-time voice interaction
+"""
+    print(usage)
+
+def check_ollama():
+    """Check if Ollama is running and model is available"""
+    try:
+        import ollama
+
+        # Try to list models
+        response = ollama.list()
+        logger.success("✅ Ollama is running")
+
+        # Check if recommended model exists
+        model_names = [m.model for m in response.models]
+
+        if any('gemma2:2b' in name for name in model_names):
+            logger.success("✅ gemma2:2b model found")
+        elif any('gemma3:4b' in name for name in model_names):
+            logger.success("✅ gemma3:4b model found (will use this)")
+        elif model_names:
+            logger.warning(f"⚠️  Recommended model not found")
+            logger.info(f"   Available models: {', '.join(model_names[:3])}")
+            logger.info("   Will use first available model")
+        else:
+            logger.error("❌ No models found. Install: ollama pull gemma2:2b")
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Ollama error: {e}")
+        print("\n🔧 How to fix:")
+        print("   1. Install Ollama: https://ollama.com")
+        print("   2. Start Ollama: ollama serve")
+        print("   3. Pull model: ollama pull gemma2:2b")
+        print()
+        return False
+
+def main():
+    """Main entry point"""
+    # Clear screen
+    os.system('clear' if os.name != 'nt' else 'cls')
+
+    print_banner()
+
+    # Check arguments
+    if len(sys.argv) < 2:
+        logger.error("❌ ERROR: Mode not specified")
+        print_usage()
+        sys.exit(1)
+
+    mode = sys.argv[1].lower()
+
+    # Validate mode
+    if mode not in ["console", "dev"]:
+        logger.error(f"❌ ERROR: Invalid mode '{mode}'")
+        print_usage()
+        sys.exit(1)
+
+    # Check Ollama
+    if not check_ollama():
+        sys.exit(1)
+
+    logger.info(f"🚀 Starting Sofia in {mode.upper()} mode...")
+
+    try:
+        if mode == "console":
+            # Console mode - MOSHI-INSPIRED SIMPLE HANDLER
+            logger.info("Initializing MOSHI-INSPIRED handler...")
+            handler = SimpleVoiceHandler(llm_model="gemma2:2b", language="de")
+            handler.run_conversation(system_prompt=AGENT_INSTRUCTION)
+            handler.cleanup()
+
+        elif mode == "dev":
+            # Browser mode - Web UI
+            logger.info("Initializing browser voice handler...")
+            handler = BrowserVoiceHandler(
+                llm_model="gemma2:2b",
+                system_prompt=AGENT_INSTRUCTION
+            )
+            handler.launch(share=False)  # Set share=True for public URL
+            handler.cleanup()
+
+    except KeyboardInterrupt:
+        print("\n\n👋 Goodbye!")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

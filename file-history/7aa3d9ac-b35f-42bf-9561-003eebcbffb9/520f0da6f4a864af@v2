@@ -1,0 +1,134 @@
+{
+  "name": "Auto Intelligence Agent",
+  "type": "background-assistant",
+  "description": "Automatically activates advanced intelligence features based on context and user intent",
+
+  "triggers": {
+    "onNewProject": {
+      "enabled": true,
+      "action": "instant-context-load",
+      "description": "Automatically understand entire project when entering new directory"
+    },
+    "onUserQuestion": {
+      "enabled": true,
+      "patterns": {
+        "explanation_needed": {
+          "regex": "(what is|explain|how does|what does).*(file|code|function)",
+          "action": "deep-explain",
+          "mode": "automatic"
+        },
+        "search_needed": {
+          "regex": "(where|find|locate|search for)",
+          "action": "semantic-search",
+          "mode": "automatic"
+        },
+        "debugging_needed": {
+          "regex": "(error|bug|broken|not working|fails|crash)",
+          "action": "parallel-debug",
+          "mode": "automatic"
+        },
+        "refactoring_needed": {
+          "regex": "(improve|refactor|optimize|better way|clean up)",
+          "action": "refactor-suggest",
+          "mode": "automatic"
+        },
+        "fix_needed": {
+          "regex": "(fix|repair|solve|resolve)",
+          "action": "cascade-fix",
+          "mode": "automatic"
+        },
+        "documentation_needed": {
+          "regex": "(document|documentation|doc|readme|explain to others)",
+          "action": "auto-document",
+          "mode": "automatic"
+        },
+        "translation_needed": {
+          "regex": "(convert|translate|port|rewrite).*(to|in|using)",
+          "action": "code-translator",
+          "mode": "automatic"
+        }
+      }
+    },
+    "onCodeRead": {
+      "enabled": true,
+      "action": "build-mental-model",
+      "description": "Automatically build semantic understanding as files are read"
+    },
+    "onError": {
+      "enabled": true,
+      "action": "auto-diagnose",
+      "description": "Automatically analyze errors and suggest fixes"
+    }
+  },
+
+  "intelligence_modes": {
+    "instant_context": {
+      "description": "Load entire project context automatically",
+      "max_files": 200,
+      "parallel_reads": 50,
+      "build_graph": true,
+      "cache_duration": 3600
+    },
+    "deep_explain": {
+      "description": "Multi-level code explanation",
+      "levels": ["eli5", "junior", "senior", "architect", "researcher"],
+      "include_diagrams": true,
+      "include_alternatives": true
+    },
+    "semantic_search": {
+      "description": "Meaning-based code search",
+      "understanding": "semantic",
+      "ranking": "similarity",
+      "max_results": 10
+    },
+    "parallel_debug": {
+      "description": "Multiple hypothesis debugging",
+      "hypotheses": 5,
+      "parallel_investigation": true,
+      "confidence_scoring": true
+    },
+    "cascade_fix": {
+      "description": "Fix bug + find similar bugs",
+      "scan_entire_codebase": true,
+      "fix_all_instances": true,
+      "add_tests": true,
+      "update_docs": true
+    },
+    "refactor_suggest": {
+      "description": "Cross-file pattern detection",
+      "min_pattern_occurrences": 3,
+      "impact_analysis": true,
+      "effort_estimation": true,
+      "ranking": "impact_per_effort"
+    },
+    "code_translator": {
+      "description": "Idiomatic code translation",
+      "preserve_semantics": true,
+      "target_idioms": true,
+      "modern_practices": true,
+      "add_types": true
+    },
+    "auto_document": {
+      "description": "Intelligent documentation generation",
+      "understand_intent": true,
+      "include_examples": true,
+      "include_diagrams": true,
+      "tutorial_style": true
+    }
+  },
+
+  "behavior": {
+    "proactive": true,
+    "silent_activation": false,
+    "show_mode": true,
+    "confidence_threshold": 0.7,
+    "explain_reasoning": true
+  },
+
+  "learning": {
+    "enabled": true,
+    "learn_from_feedback": true,
+    "improve_triggers": true,
+    "personalization": true
+  }
+}

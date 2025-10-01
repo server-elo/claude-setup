@@ -1,0 +1,89 @@
+"""
+Text-to-Speech using Edge TTS (Microsoft, fast, high quality, free)
+German voice support
+"""
+import asyncio
+import edge_tts
+import io
+from pydub import AudioSegment
+from loguru import logger
+
+class TextToSpeech:
+    def __init__(self, voice="de-DE-KatjaNeural"):
+        """
+        Initialize Edge TTS with German voice
+
+        German voices:
+        - de-DE-KatjaNeural (Female, friendly)
+        - de-DE-ConradNeural (Male, professional)
+        - de-DE-AmalaNeural (Female, calm)
+        """
+        self.voice_name = voice
+        self.sample_rate = 24000  # Edge TTS default
+        logger.success(f"Edge TTS initialized (voice: {voice})")
+
+    def speak(self, text: str) -> bytes:
+        """Convert text to audio (returns raw PCM bytes) - sync wrapper"""
+        return asyncio.run(self._generate_audio(text))
+
+    async def _generate_audio(self, text: str) -> bytes:
+        """Generate audio using Edge TTS and convert to raw PCM"""
+        try:
+            logger.debug(f"Generating speech: {text[:50]}...")
+
+            # Generate MP3 audio with Edge TTS
+            communicate = edge_tts.Communicate(text, self.voice_name)
+            audio_chunks = []
+
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_chunks.append(chunk["data"])
+
+            if audio_chunks:
+                mp3_data = b''.join(audio_chunks)
+
+                # Convert MP3 to raw PCM for PyAudio
+                audio = AudioSegment.from_mp3(io.BytesIO(mp3_data))
+
+                # Convert to mono 16-bit PCM at 24kHz
+                audio = audio.set_channels(1)
+                audio = audio.set_frame_rate(24000)
+                audio = audio.set_sample_width(2)  # 16-bit
+
+                pcm_data = audio.raw_data
+                logger.debug(f"Generated {len(pcm_data)} bytes of PCM audio")
+                return pcm_data
+            else:
+                logger.warning("No audio generated")
+                return b''
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return b''
+
+    def speak_stream(self, text: str):
+        """Stream audio generation (sentence by sentence)"""
+        try:
+            logger.debug(f"Streaming speech: {text[:50]}...")
+
+            # Split into sentences for streaming
+            sentences = []
+            current = ""
+            for char in text:
+                current += char
+                if char in '.!?':
+                    sentences.append(current.strip())
+                    current = ""
+            if current.strip():
+                sentences.append(current.strip())
+
+            # Generate and yield each sentence
+            for sentence in sentences:
+                audio = self.speak(sentence)
+                if audio:
+                    yield audio
+
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")

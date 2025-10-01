@@ -1,0 +1,27 @@
+[
+  {
+    "content": "Find and analyze sofia-en codebase",
+    "status": "completed",
+    "activeForm": "Finding and analyzing sofia-en codebase"
+  },
+  {
+    "content": "Compare sofia-en architecture with checkpoint configurations",
+    "status": "pending",
+    "activeForm": "Comparing sofia-en architecture with checkpoint configurations"
+  },
+  {
+    "content": "Assess compatibility of checkpoint models with sofia-en",
+    "status": "pending",
+    "activeForm": "Assessing compatibility of checkpoint models with sofia-en"
+  },
+  {
+    "content": "Request access to sofia-en directory or relevant files",
+    "status": "completed",
+    "activeForm": "Requesting access to sofia-en directory or relevant files"
+  },
+  {
+    "content": "Analyze sofia-en directory structure and configuration",
+    "status": "in_progress",
+    "activeForm": "Analyzing sofia-en directory structure and configuration"
+  }
+]

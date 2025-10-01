@@ -1,0 +1,350 @@
+"""
+Guided Reasoning Pipeline for LLM-Driven Red Teaming
+Based on: arXiv:2509.07939
+Improves completion from 13.5%-16.5% to 71.8%-78.6%
+"""
+
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+import asyncio
+
+from .attack_tree import AttackTree, AttackNode, TTP
+from ..llm.base import BaseLLM
+
+
+@dataclass
+class ReasoningStep:
+    """Single step in guided reasoning process."""
+    ttp: TTP
+    reasoning: str
+    proposed_action: str
+    validation_result: bool
+    execution_result: Optional[str] = None
+    success: bool = False
+
+
+class GuidedReasoningPipeline:
+    """
+    Guided reasoning pipeline that constrains LLM to MITRE ATT&CK tactics.
+    Prevents hallucinated steps and unproductive actions.
+    """
+
+    def __init__(
+        self,
+        llm: BaseLLM,
+        attack_tree: AttackTree,
+        max_retries: int = 3
+    ):
+        self.llm = llm
+        self.attack_tree = attack_tree
+        self.max_retries = max_retries
+        self.reasoning_history: List[ReasoningStep] = []
+
+    async def execute_attack_path(
+        self,
+        objective: str,
+        target_info: Dict[str, any]
+    ) -> List[ReasoningStep]:
+        """
+        Execute complete attack path with guided reasoning.
+
+        Args:
+            objective: High-level attack objective
+            target_info: Information about target system
+
+        Returns:
+            List of reasoning steps executed
+        """
+        # Build attack tree for objective
+        root = self.attack_tree.build_attack_path(
+            objective,
+            target_info.get("platform", "Linux")
+        )
+
+        current_node = root
+
+        while current_node is not None:
+            # Execute current TTP with guided reasoning
+            step = await self._execute_ttp_step(current_node, target_info)
+            self.reasoning_history.append(step)
+
+            if step.success:
+                # Mark completed and move to next step
+                self.attack_tree.mark_completed(current_node)
+                next_steps = self.attack_tree.get_next_steps(current_node)
+                current_node = next_steps[0] if next_steps else None
+            else:
+                # Try alternative approaches or fail
+                alternative = await self._find_alternative(current_node, target_info)
+                if alternative:
+                    current_node = alternative
+                else:
+                    break
+
+        return self.reasoning_history
+
+    async def _execute_ttp_step(
+        self,
+        node: AttackNode,
+        target_info: Dict[str, any]
+    ) -> ReasoningStep:
+        """
+        Execute single TTP step with guided reasoning.
+
+        Args:
+            node: Current attack tree node
+            target_info: Target system information
+
+        Returns:
+            ReasoningStep result
+        """
+        ttp = node.ttp
+
+        # Generate reasoning constrained by TTP
+        reasoning_prompt = self._build_reasoning_prompt(ttp, target_info)
+        reasoning = await self.llm.generate(reasoning_prompt)
+
+        # Generate action constrained by TTP
+        action_prompt = self._build_action_prompt(ttp, reasoning, target_info)
+        action = await self.llm.generate(action_prompt)
+
+        # Validate action against TTP constraints
+        valid = self.attack_tree.validate_action(action, node)
+
+        if not valid:
+            # Retry with explicit constraints
+            for retry in range(self.max_retries):
+                correction_prompt = self._build_correction_prompt(
+                    ttp,
+                    action,
+                    node.success_criteria
+                )
+                action = await self.llm.generate(correction_prompt)
+                valid = self.attack_tree.validate_action(action, node)
+                if valid:
+                    break
+
+        # Simulate execution (in production, actually execute)
+        execution_result, success = await self._simulate_execution(
+            action,
+            node,
+            target_info
+        )
+
+        return ReasoningStep(
+            ttp=ttp,
+            reasoning=reasoning,
+            proposed_action=action,
+            validation_result=valid,
+            execution_result=execution_result,
+            success=success
+        )
+
+    def _build_reasoning_prompt(self, ttp: TTP, target_info: Dict) -> str:
+        """Build prompt that constrains reasoning to TTP scope."""
+        return f"""You are executing the MITRE ATT&CK technique: {ttp.id} - {ttp.name}
+
+Tactic: {ttp.tactic.value}
+Description: {ttp.description}
+
+Target Information:
+{self._format_target_info(target_info)}
+
+Prerequisites for this technique:
+{', '.join(ttp.prerequisites) if ttp.prerequisites else 'None'}
+
+Data sources that might detect this:
+{', '.join(ttp.data_sources) if ttp.data_sources else 'None'}
+
+Based on this technique definition, provide your reasoning for how to accomplish this step.
+Focus ONLY on actions that align with this specific TTP.
+Do NOT suggest actions outside the scope of this technique.
+
+Your reasoning:"""
+
+    def _build_action_prompt(
+        self,
+        ttp: TTP,
+        reasoning: str,
+        target_info: Dict
+    ) -> str:
+        """Build prompt for generating specific action."""
+        return f"""Based on your reasoning:
+{reasoning}
+
+And the technique {ttp.id} - {ttp.name}:
+{ttp.description}
+
+Generate a SPECIFIC, EXECUTABLE action that:
+1. Aligns with the technique definition
+2. Can be realistically performed
+3. Moves toward the attack objective
+4. Avoids detection methods: {', '.join(ttp.detection_methods)}
+
+Provide ONLY the action, no explanation.
+
+Action:"""
+
+    def _build_correction_prompt(
+        self,
+        ttp: TTP,
+        invalid_action: str,
+        success_criteria: List[str]
+    ) -> str:
+        """Build prompt to correct invalid action."""
+        return f"""The proposed action does not align with technique {ttp.id} - {ttp.name}.
+
+Invalid action: {invalid_action}
+
+Technique description: {ttp.description}
+
+Success criteria:
+{chr(10).join(f'- {c}' for c in success_criteria)}
+
+Generate a corrected action that:
+1. Strictly follows the technique definition
+2. Meets the success criteria
+3. Is specific and executable
+
+Corrected action:"""
+
+    def _format_target_info(self, target_info: Dict) -> str:
+        """Format target information for prompts."""
+        lines = []
+        for key, value in target_info.items():
+            lines.append(f"- {key}: {value}")
+        return '\n'.join(lines)
+
+    async def _simulate_execution(
+        self,
+        action: str,
+        node: AttackNode,
+        target_info: Dict
+    ) -> Tuple[str, bool]:
+        """
+        Simulate action execution.
+        In production, this would actually execute the action.
+
+        Args:
+            action: Action to execute
+            node: Current attack tree node
+            target_info: Target information
+
+        Returns:
+            (execution_result, success)
+        """
+        # For demonstration, simulate with probabilistic success
+        import random
+
+        # Higher difficulty = lower success probability
+        success_prob = 1.0 - node.estimated_difficulty
+
+        success = random.random() < success_prob
+
+        if success:
+            result = f"Successfully executed: {action}\n"
+            result += f"Success criteria met: {', '.join(node.success_criteria)}"
+        else:
+            failure = random.choice(node.failure_indicators) if node.failure_indicators else "Unknown failure"
+            result = f"Execution failed: {action}\n"
+            result += f"Failure reason: {failure}"
+
+        return result, success
+
+    async def _find_alternative(
+        self,
+        failed_node: AttackNode,
+        target_info: Dict
+    ) -> Optional[AttackNode]:
+        """
+        Find alternative TTP when current approach fails.
+
+        Args:
+            failed_node: Node that failed
+            target_info: Target information
+
+        Returns:
+            Alternative AttackNode or None
+        """
+        # Look for sibling nodes (alternative techniques for same tactic)
+        if failed_node.parent:
+            siblings = failed_node.parent.children
+            for sibling in siblings:
+                if sibling != failed_node and not sibling.completed:
+                    return sibling
+
+        # No alternatives found
+        return None
+
+    def get_attack_summary(self) -> str:
+        """Generate summary of attack execution."""
+        summary = "=" * 60 + "\n"
+        summary += "ATTACK EXECUTION SUMMARY\n"
+        summary += "=" * 60 + "\n\n"
+
+        total_steps = len(self.reasoning_history)
+        successful_steps = sum(1 for step in self.reasoning_history if step.success)
+
+        summary += f"Total Steps: {total_steps}\n"
+        summary += f"Successful: {successful_steps}\n"
+        summary += f"Success Rate: {(successful_steps/total_steps*100):.1f}%\n\n"
+
+        summary += "EXECUTION DETAILS:\n"
+        summary += "-" * 60 + "\n\n"
+
+        for i, step in enumerate(self.reasoning_history, 1):
+            summary += f"Step {i}: {step.ttp.id} - {step.ttp.name}\n"
+            summary += f"Tactic: {step.ttp.tactic.value}\n"
+            summary += f"Action: {step.proposed_action[:100]}...\n"
+            summary += f"Result: {'✓ SUCCESS' if step.success else '✗ FAILED'}\n"
+            if step.execution_result:
+                summary += f"Details: {step.execution_result[:150]}...\n"
+            summary += "\n"
+
+        return summary
+
+    def get_mitre_coverage(self) -> Dict[str, int]:
+        """Get coverage of MITRE ATT&CK tactics."""
+        coverage = {}
+
+        for step in self.reasoning_history:
+            tactic = step.ttp.tactic.value
+            coverage[tactic] = coverage.get(tactic, 0) + 1
+
+        return coverage
+
+    def export_to_mitre_navigator(self, filepath: str):
+        """
+        Export execution to MITRE ATT&CK Navigator format.
+
+        Args:
+            filepath: Path to save JSON file
+        """
+        import json
+
+        # Build Navigator layer format
+        layer = {
+            "name": "Red Team Execution",
+            "versions": {
+                "attack": "14",
+                "navigator": "4.9.1",
+                "layer": "4.5"
+            },
+            "domain": "enterprise-attack",
+            "description": "Red team execution coverage",
+            "techniques": []
+        }
+
+        for step in self.reasoning_history:
+            technique = {
+                "techniqueID": step.ttp.id,
+                "tactic": step.ttp.tactic.value,
+                "color": "#00ff00" if step.success else "#ff0000",
+                "comment": step.proposed_action[:200],
+                "enabled": True,
+                "score": 1 if step.success else 0
+            }
+            layer["techniques"].append(technique)
+
+        with open(filepath, 'w') as f:
+            json.dump(layer, f, indent=2)

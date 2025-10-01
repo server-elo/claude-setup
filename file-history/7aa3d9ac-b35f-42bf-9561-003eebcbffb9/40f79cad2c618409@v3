@@ -1,0 +1,332 @@
+"""
+Test Runner Module
+
+This module is responsible for executing adversarial prompts against the target LLM application.
+It handles different types of API endpoints and authentication methods.
+"""
+
+import json
+import logging
+import requests
+import time
+import shlex
+from typing import Dict, Any, Optional
+from playwright.sync_api import sync_playwright
+from tenacity import retry, stop_after_attempt, wait_exponential
+from collections import deque
+from threading import Lock
+
+logger = logging.getLogger("llm-red-team-ci.test_runner")
+
+class TestRunner:
+    """
+    TestRunner executes adversarial prompts against the target LLM application.
+    
+    It supports different types of endpoints:
+    - REST API endpoints
+    - WebSocket endpoints
+    - Web UI interfaces (using Playwright)
+    """
+    
+    def __init__(self, api_endpoint: str, api_key: Optional[str] = None, service_tier: str = "standard", web_ui_config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the TestRunner.
+
+        Args:
+            api_endpoint: The URL of the LLM application to test
+            api_key: Optional API key for authentication
+            service_tier: Service tier for test volume (basic, standard, premium)
+            web_ui_config: Optional configuration for web UI testing (Playwright)
+        """
+        self.api_endpoint = api_endpoint
+        self.api_key = api_key
+        self.service_tier = service_tier
+        self.web_ui_config = web_ui_config or {}
+        
+        # Determine the endpoint type
+        if api_endpoint.startswith("http"):
+            if "websocket" in api_endpoint or "ws://" in api_endpoint or "wss://" in api_endpoint:
+                self.endpoint_type = "websocket"
+            else:
+                self.endpoint_type = "rest"
+        else:
+            self.endpoint_type = "unknown"
+        
+        # Set request limits based on service tier
+        self.rate_limits = {
+            "basic": {"requests_per_minute": 10, "max_requests": 1000},
+            "standard": {"requests_per_minute": 30, "max_requests": 5000},
+            "premium": {"requests_per_minute": 100, "max_requests": 20000}
+        }
+
+        # Rate limiting implementation
+        self.request_count = 0
+        self.request_times = deque()  # Track request timestamps for rate limiting
+        self.rate_limit_lock = Lock()  # Thread-safe rate limiting
+
+        logger.info(f"TestRunner initialized with endpoint type: {self.endpoint_type}")
+        logger.info(f"Rate limits: {self.rate_limits[service_tier]['requests_per_minute']} req/min, "
+                   f"max {self.rate_limits[service_tier]['max_requests']} total")
+    
+    def _check_and_apply_rate_limit(self):
+        """
+        Check rate limits and sleep if necessary to comply with requests_per_minute.
+        This implements a sliding window rate limiter.
+        """
+        with self.rate_limit_lock:
+            current_time = time.time()
+            rpm = self.rate_limits[self.service_tier]["requests_per_minute"]
+            max_requests = self.rate_limits[self.service_tier]["max_requests"]
+
+            # Check total request limit
+            if self.request_count >= max_requests:
+                raise Exception(
+                    f"Maximum request limit reached ({max_requests} for {self.service_tier} tier). "
+                    f"Upgrade your service tier or wait for the limit to reset."
+                )
+
+            # Remove timestamps older than 60 seconds (sliding window)
+            while self.request_times and current_time - self.request_times[0] > 60:
+                self.request_times.popleft()
+
+            # Check if we're at the rate limit
+            if len(self.request_times) >= rpm:
+                # Calculate how long to sleep
+                oldest_request = self.request_times[0]
+                sleep_time = 60 - (current_time - oldest_request)
+
+                if sleep_time > 0:
+                    logger.info(f"Rate limit reached ({rpm} req/min). Sleeping for {sleep_time:.2f}s")
+                    time.sleep(sleep_time)
+
+                    # Clean up old timestamps after sleep
+                    current_time = time.time()
+                    while self.request_times and current_time - self.request_times[0] > 60:
+                        self.request_times.popleft()
+
+            # Record this request
+            self.request_times.append(current_time)
+            self.request_count += 1
+
+            logger.debug(f"Rate limit status: {len(self.request_times)}/{rpm} requests in last 60s, "
+                        f"{self.request_count}/{max_requests} total")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def execute_prompt(self, prompt) -> Dict[str, Any]:
+        """
+        Execute a prompt against the target LLM application with rate limiting.
+
+        Args:
+            prompt: The prompt object containing the adversarial prompt
+
+        Returns:
+            Dict containing the response from the LLM application
+        """
+        # Apply rate limiting before making the request
+        try:
+            self._check_and_apply_rate_limit()
+        except Exception as e:
+            logger.error(f"Rate limit error: {e}")
+            return {"error": str(e)}
+        
+        # Execute the prompt based on the endpoint type
+        if self.endpoint_type == "rest":
+            return self._execute_rest_prompt(prompt)
+        elif self.endpoint_type == "websocket":
+            return self._execute_websocket_prompt(prompt)
+        else:
+            return self._execute_playwright_prompt(prompt)
+    
+    def _execute_rest_prompt(self, prompt) -> Dict[str, Any]:
+        """Execute a prompt against a REST API endpoint."""
+        headers = {}
+        if self.api_key:
+            # Try common API key header formats
+            headers = {
+                "Authorization": f"Bearer {self.api_key}"
+            }
+        
+        # Prepare the request payload based on common LLM API formats
+        payload = {
+            "prompt": prompt.text,
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "model": "gpt-3.5-turbo"  # Default model, will be overridden by API
+        }
+        
+        # Adjust payload based on prompt type and API format
+        if hasattr(prompt, 'format_for_api'):
+            payload = prompt.format_for_api(payload)
+        
+        try:
+            response = requests.post(
+                self.api_endpoint,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            # Log the response status
+            logger.info(f"API response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                logger.warning(f"API returned non-200 status: {response.status_code}")
+                return {
+                    "status_code": response.status_code,
+                    "error": f"API returned status {response.status_code}",
+                    "response_text": response.text[:1000]  # Truncate long error responses
+                }
+            
+            # Try to parse the response as JSON
+            try:
+                result = response.json()
+            except json.JSONDecodeError:
+                # If not JSON, return the raw text
+                result = {"raw_text": response.text}
+            
+            # Add curl command for reproduction
+            curl_command = self._generate_curl_command(prompt.text, headers)
+            result["curl_command"] = curl_command
+            
+            return result
+            
+        except requests.RequestException as e:
+            logger.error(f"Request failed: {e}")
+            return {"error": str(e)}
+    
+    def _execute_websocket_prompt(self, prompt) -> Dict[str, Any]:
+        """Execute a prompt against a WebSocket endpoint."""
+        # WebSocket implementation would go here
+        # For the MVP, we'll return a placeholder
+        logger.warning("WebSocket execution not yet implemented")
+        return {"error": "WebSocket execution not implemented yet"}
+    
+    def _execute_playwright_prompt(self, prompt) -> Dict[str, Any]:
+        """Execute a prompt using Playwright for web UI testing with configurable selectors."""
+        logger.info("Using Playwright for web UI testing")
+
+        # Get configuration with defaults
+        input_selector = self.web_ui_config.get("input_selector", "textarea, input[type='text']")
+        submit_selector = self.web_ui_config.get("submit_selector", "button[type='submit']")
+        response_selector = self.web_ui_config.get("response_selector", ".response")
+        wait_for_selector = self.web_ui_config.get("wait_for_selector")
+        wait_timeout = self.web_ui_config.get("wait_timeout", 5000)
+        screenshot_on_failure = self.web_ui_config.get("screenshot_on_failure", True)
+
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+
+                # Navigate to the endpoint
+                logger.info(f"Navigating to {self.api_endpoint}")
+                page.goto(self.api_endpoint, timeout=30000)
+
+                # Wait for the page to load
+                page.wait_for_load_state("networkidle")
+
+                # Find input element using configured selector
+                logger.info(f"Looking for input with selector: {input_selector}")
+                try:
+                    input_element = page.wait_for_selector(input_selector, timeout=10000)
+                except Exception as e:
+                    error_msg = f"Could not find input element with selector '{input_selector}'"
+                    logger.error(error_msg)
+                    if screenshot_on_failure:
+                        screenshot_path = f"error_input_{prompt.id}.png"
+                        page.screenshot(path=screenshot_path)
+                        browser.close()
+                        return {"error": error_msg, "screenshot_path": screenshot_path}
+                    browser.close()
+                    return {"error": error_msg}
+
+                # Type the prompt
+                logger.info("Typing prompt into input field")
+                input_element.fill(prompt.text)
+
+                # Find and click submit button
+                logger.info(f"Looking for submit button with selector: {submit_selector}")
+                try:
+                    submit_button = page.wait_for_selector(submit_selector, timeout=5000)
+                    submit_button.click()
+                except Exception as e:
+                    # Fallback: try pressing Enter
+                    logger.info("Submit button not found, pressing Enter instead")
+                    input_element.press("Enter")
+
+                # Wait for response
+                if wait_for_selector:
+                    logger.info(f"Waiting for selector: {wait_for_selector}")
+                    try:
+                        page.wait_for_selector(wait_for_selector, timeout=wait_timeout)
+                    except:
+                        logger.warning(f"Timeout waiting for selector: {wait_for_selector}")
+                else:
+                    logger.info(f"Waiting {wait_timeout}ms for response")
+                    page.wait_for_timeout(wait_timeout)
+
+                # Capture the response using configured selector
+                logger.info(f"Capturing response with selector: {response_selector}")
+                response_text = ""
+                try:
+                    response_element = page.wait_for_selector(response_selector, timeout=5000)
+                    response_text = response_element.inner_text()
+                    logger.info(f"Captured response: {response_text[:100]}...")
+                except Exception as e:
+                    error_msg = f"Could not find response with selector '{response_selector}'"
+                    logger.error(error_msg)
+                    if screenshot_on_failure:
+                        screenshot_path = f"error_response_{prompt.id}.png"
+                        page.screenshot(path=screenshot_path)
+                        browser.close()
+                        return {"error": error_msg, "screenshot_path": screenshot_path, "response_text": ""}
+
+                # Take a screenshot for evidence
+                screenshot_path = f"playwright_screenshot_{prompt.id}.png"
+                page.screenshot(path=screenshot_path)
+
+                browser.close()
+
+                return {
+                    "response_text": response_text,
+                    "screenshot_path": screenshot_path,
+                    "html": page.content()[:10000],  # Limit HTML to 10KB
+                    "web_ui_config_used": {
+                        "input_selector": input_selector,
+                        "submit_selector": submit_selector,
+                        "response_selector": response_selector
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Playwright execution failed: {e}")
+            return {"error": str(e)}
+    
+    def _generate_curl_command(self, prompt_text: str, headers: Dict[str, str]) -> str:
+        """
+        Generate a properly escaped curl command for reproducing the request.
+        Uses shlex for proper shell escaping.
+        """
+        # Build curl command as a list for proper escaping
+        curl_parts = ["curl", "-X", "POST", self.api_endpoint]
+
+        # Add headers
+        for key, value in headers.items():
+            curl_parts.extend(["-H", f"{key}: {value}"])
+
+        # Create payload
+        payload = {
+            "prompt": prompt_text,
+            "max_tokens": 1000,
+            "temperature": 0.7
+        }
+
+        # Add JSON data
+        curl_parts.extend(["-d", json.dumps(payload)])
+
+        # Add content-type header if not already present
+        if not any(k.lower() == "content-type" for k in headers.keys()):
+            curl_parts.extend(["-H", "Content-Type: application/json"])
+
+        # Join with proper shell escaping
+        return shlex.join(curl_parts)

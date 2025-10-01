@@ -1,0 +1,109 @@
+"""
+Language Model using Ollama (100% local, free)
+"""
+from ollama import chat
+from loguru import logger
+from typing import List, Dict
+
+class LanguageModel:
+    def __init__(self, model: str = "gemma2:2b"):
+        """
+        Initialize local LLM
+
+        Recommended models (free):
+        - gemma2:2b (fastest, 2GB)
+        - qwen2.5:3b (balanced, 3GB)
+        - llama3.2:3b (good quality, 3GB)
+        """
+        self.model = model
+        self.conversation_history = []
+        logger.info(f"Using Ollama model: {model}")
+
+    def chat(self, message: str, system_prompt: str = None) -> str:
+        """Get response from LLM (streaming for low latency)"""
+        try:
+            messages = []
+
+            # Add system prompt if provided
+            if system_prompt:
+                messages.append({
+                    "role": "system",
+                    "content": system_prompt
+                })
+
+            # Add conversation history
+            messages.extend(self.conversation_history)
+
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
+
+            logger.debug(f"Sending to LLM: {message}")
+
+            # Use streaming for lower perceived latency
+            from ollama import chat as ollama_chat
+            response_text = ""
+
+            for chunk in ollama_chat(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                options={
+                    "num_predict": 150,  # Shorter responses for voice
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                }
+            ):
+                if "message" in chunk and "content" in chunk["message"]:
+                    response_text += chunk["message"]["content"]
+
+            # Update history
+            self.conversation_history.append({"role": "user", "content": message})
+            self.conversation_history.append({"role": "assistant", "content": response_text})
+
+            # Keep history manageable (last 10 exchanges)
+            if len(self.conversation_history) > 20:
+                self.conversation_history = self.conversation_history[-20:]
+
+            logger.debug(f"LLM response: {response_text[:100]}...")
+            return response_text
+
+        except Exception as e:
+            logger.error(f"LLM error: {e}")
+            return "Entschuldigung, ich habe gerade Schwierigkeiten."
+
+    def stream_chat(self, message: str, system_prompt: str = None):
+        """Stream response from LLM word-by-word (for realtime TTS)"""
+        try:
+            messages = []
+
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+
+            messages.extend(self.conversation_history)
+            messages.append({"role": "user", "content": message})
+
+            from ollama import chat as ollama_chat
+
+            for chunk in ollama_chat(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                options={
+                    "num_predict": 150,
+                    "temperature": 0.7,
+                }
+            ):
+                if "message" in chunk and "content" in chunk["message"]:
+                    yield chunk["message"]["content"]
+
+        except Exception as e:
+            logger.error(f"LLM streaming error: {e}")
+            yield "Entschuldigung, ich habe gerade Schwierigkeiten."
+
+    def clear_history(self):
+        """Clear conversation history"""
+        self.conversation_history = []
+        logger.info("Conversation history cleared")

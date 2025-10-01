@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+Moshi MLX Test Script
+Tests Moshi voice AI on M3 Pro with 4-bit quantization
+"""
+import time
+import sys
+
+print("=" * 60)
+print("🎙️  MOSHI MLX TEST - M3 Pro Edition")
+print("=" * 60)
+print(f"Python: {sys.version}")
+print()
+
+try:
+    import moshi_mlx
+    print("✅ moshi_mlx imported successfully")
+    print(f"   Version: {moshi_mlx.__version__ if hasattr(moshi_mlx, '__version__') else 'unknown'}")
+except ImportError as e:
+    print(f"❌ Failed to import moshi_mlx: {e}")
+    sys.exit(1)
+
+try:
+    import mlx.core as mx
+    print(f"✅ MLX imported successfully")
+    print(f"   MLX Version: {mx.__version__ if hasattr(mx, '__version__') else 'unknown'}")
+except ImportError as e:
+    print(f"❌ Failed to import MLX: {e}")
+    sys.exit(1)
+
+try:
+    import sounddevice as sd
+    print("✅ sounddevice imported successfully")
+    print()
+    print("Available audio devices:")
+    print(sd.query_devices())
+except ImportError as e:
+    print(f"❌ Failed to import sounddevice: {e}")
+
+print()
+print("=" * 60)
+print("🚀 READY TO TEST MOSHI")
+print("=" * 60)
+print()
+print("Run: .venv/bin/python -m moshi_mlx.local -q 4 --hf-repo kyutai/moshiko-mlx-q4")
+print()

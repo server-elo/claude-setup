@@ -1,0 +1,316 @@
+"""
+Memory-Guided Attack Selection System
+Based on: AutoRedTeamer (arXiv:2503.15754)
+Enables lifelong attack integration and continuous learning
+"""
+
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+import json
+import pickle
+from pathlib import Path
+import numpy as np
+
+
+@dataclass
+class AttackRecord:
+    """Record of a single attack attempt."""
+    attack_id: str
+    timestamp: datetime
+    target_model: str
+    attack_type: str
+    prompt: str
+    response: str
+    success: bool
+    success_score: float  # 0-1 confidence
+    context: Dict[str, any]
+    metadata: Dict[str, any] = field(default_factory=dict)
+
+
+@dataclass
+class AttackStrategy:
+    """Learned attack strategy."""
+    strategy_id: str
+    name: str
+    description: str
+    tactics: List[str]
+    success_rate: float
+    usage_count: int
+    last_updated: datetime
+    applicable_contexts: List[str]
+    example_prompts: List[str]
+
+
+class AttackMemory:
+    """
+    Persistent memory system for attack history.
+    Stores successful and failed attacks for learning.
+    """
+
+    def __init__(self, memory_dir: str = "./data/attack_memory"):
+        self.memory_dir = Path(memory_dir)
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+
+        self.attack_history: List[AttackRecord] = []
+        self.strategies: Dict[str, AttackStrategy] = {}
+
+        self._load_memory()
+
+    def add_attack_record(self, record: AttackRecord):
+        """Add attack record to memory."""
+        self.attack_history.append(record)
+
+        # Update strategy success rates
+        if record.attack_type in self.strategies:
+            strategy = self.strategies[record.attack_type]
+            strategy.usage_count += 1
+
+            # Update success rate with exponential moving average
+            alpha = 0.1
+            strategy.success_rate = (
+                alpha * record.success_score +
+                (1 - alpha) * strategy.success_rate
+            )
+            strategy.last_updated = datetime.now()
+
+    def get_successful_attacks(
+        self,
+        target_model: Optional[str] = None,
+        attack_type: Optional[str] = None,
+        min_success_score: float = 0.8
+    ) -> List[AttackRecord]:
+        """Retrieve successful attacks from memory."""
+        filtered = [
+            record for record in self.attack_history
+            if record.success_score >= min_success_score
+        ]
+
+        if target_model:
+            filtered = [r for r in filtered if r.target_model == target_model]
+
+        if attack_type:
+            filtered = [r for r in filtered if r.attack_type == attack_type]
+
+        return filtered
+
+    def get_similar_attacks(
+        self,
+        context: Dict[str, any],
+        top_k: int = 5
+    ) -> List[AttackRecord]:
+        """
+        Find similar past attacks based on context.
+        Uses simple similarity for demonstration.
+        In production, use semantic embeddings.
+        """
+        if not self.attack_history:
+            return []
+
+        # Calculate similarity scores
+        scores = []
+        for record in self.attack_history:
+            similarity = self._calculate_context_similarity(
+                context,
+                record.context
+            )
+            scores.append((record, similarity))
+
+        # Sort by similarity and return top-k
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return [record for record, _ in scores[:top_k]]
+
+    def _calculate_context_similarity(
+        self,
+        context1: Dict[str, any],
+        context2: Dict[str, any]
+    ) -> float:
+        """Calculate similarity between two contexts."""
+        # Simple Jaccard similarity for demonstration
+        keys1 = set(context1.keys())
+        keys2 = set(context2.keys())
+
+        intersection = len(keys1 & keys2)
+        union = len(keys1 | keys2)
+
+        return intersection / union if union > 0 else 0.0
+
+    def add_strategy(self, strategy: AttackStrategy):
+        """Add new attack strategy to memory."""
+        self.strategies[strategy.strategy_id] = strategy
+
+    def get_top_strategies(self, top_k: int = 10) -> List[AttackStrategy]:
+        """Get top performing strategies."""
+        sorted_strategies = sorted(
+            self.strategies.values(),
+            key=lambda s: s.success_rate,
+            reverse=True
+        )
+        return sorted_strategies[:top_k]
+
+    def save_memory(self):
+        """Persist memory to disk."""
+        # Save attack history
+        history_file = self.memory_dir / "attack_history.pkl"
+        with open(history_file, 'wb') as f:
+            pickle.dump(self.attack_history, f)
+
+        # Save strategies
+        strategies_file = self.memory_dir / "strategies.json"
+        strategies_data = {
+            sid: {
+                "strategy_id": s.strategy_id,
+                "name": s.name,
+                "description": s.description,
+                "tactics": s.tactics,
+                "success_rate": s.success_rate,
+                "usage_count": s.usage_count,
+                "last_updated": s.last_updated.isoformat(),
+                "applicable_contexts": s.applicable_contexts,
+                "example_prompts": s.example_prompts
+            }
+            for sid, s in self.strategies.items()
+        }
+
+        with open(strategies_file, 'w') as f:
+            json.dump(strategies_data, f, indent=2)
+
+    def _load_memory(self):
+        """Load memory from disk."""
+        history_file = self.memory_dir / "attack_history.pkl"
+        if history_file.exists():
+            with open(history_file, 'rb') as f:
+                self.attack_history = pickle.load(f)
+
+        strategies_file = self.memory_dir / "strategies.json"
+        if strategies_file.exists():
+            with open(strategies_file, 'r') as f:
+                strategies_data = json.load(f)
+
+            self.strategies = {
+                sid: AttackStrategy(
+                    strategy_id=data["strategy_id"],
+                    name=data["name"],
+                    description=data["description"],
+                    tactics=data["tactics"],
+                    success_rate=data["success_rate"],
+                    usage_count=data["usage_count"],
+                    last_updated=datetime.fromisoformat(data["last_updated"]),
+                    applicable_contexts=data["applicable_contexts"],
+                    example_prompts=data["example_prompts"]
+                )
+                for sid, data in strategies_data.items()
+            }
+
+    def get_statistics(self) -> Dict[str, any]:
+        """Get memory statistics."""
+        total_attacks = len(self.attack_history)
+        successful_attacks = sum(1 for r in self.attack_history if r.success)
+
+        return {
+            "total_attacks": total_attacks,
+            "successful_attacks": successful_attacks,
+            "success_rate": successful_attacks / total_attacks if total_attacks > 0 else 0,
+            "total_strategies": len(self.strategies),
+            "avg_strategy_success": np.mean([s.success_rate for s in self.strategies.values()]) if self.strategies else 0
+        }
+
+
+class MemoryGuidedSelector:
+    """
+    Memory-guided attack selection mechanism.
+    Selects optimal attacks based on past performance.
+    """
+
+    def __init__(self, memory: AttackMemory):
+        self.memory = memory
+        self.exploration_rate = 0.2  # Epsilon for epsilon-greedy
+
+    def select_next_attack(
+        self,
+        available_attacks: List[str],
+        context: Dict[str, any]
+    ) -> str:
+        """
+        Select next attack using memory-guided approach.
+
+        Args:
+            available_attacks: List of available attack types
+            context: Current attack context
+
+        Returns:
+            Selected attack type
+        """
+        # Epsilon-greedy selection
+        if np.random.random() < self.exploration_rate:
+            # Explore: random selection
+            return np.random.choice(available_attacks)
+        else:
+            # Exploit: select based on past success
+            return self._exploit_best_attack(available_attacks, context)
+
+    def _exploit_best_attack(
+        self,
+        available_attacks: List[str],
+        context: Dict[str, any]
+    ) -> str:
+        """Select attack with highest expected success."""
+        # Get similar past attacks
+        similar_attacks = self.memory.get_similar_attacks(context, top_k=20)
+
+        # Calculate success rates for each attack type
+        attack_scores = {}
+        for attack_type in available_attacks:
+            relevant_attacks = [
+                a for a in similar_attacks
+                if a.attack_type == attack_type
+            ]
+
+            if relevant_attacks:
+                # Average success score from similar contexts
+                attack_scores[attack_type] = np.mean([
+                    a.success_score for a in relevant_attacks
+                ])
+            else:
+                # No history, check strategy success rate
+                if attack_type in self.memory.strategies:
+                    attack_scores[attack_type] = self.memory.strategies[attack_type].success_rate
+                else:
+                    attack_scores[attack_type] = 0.5  # Default
+
+        # Select attack with highest score
+        best_attack = max(attack_scores.items(), key=lambda x: x[1])
+        return best_attack[0]
+
+    def update_from_result(
+        self,
+        attack_type: str,
+        success: bool,
+        success_score: float
+    ):
+        """Update selector based on attack result."""
+        # Adjust exploration rate based on overall success
+        stats = self.memory.get_statistics()
+        if stats["success_rate"] > 0.7:
+            # High success, reduce exploration
+            self.exploration_rate = max(0.1, self.exploration_rate * 0.95)
+        else:
+            # Low success, increase exploration
+            self.exploration_rate = min(0.4, self.exploration_rate * 1.05)
+
+    def get_recommended_strategies(
+        self,
+        context: Dict[str, any],
+        top_k: int = 5
+    ) -> List[AttackStrategy]:
+        """Get recommended strategies for given context."""
+        # Filter strategies by applicable contexts
+        applicable = [
+            strategy for strategy in self.memory.strategies.values()
+            if any(ctx in str(context) for ctx in strategy.applicable_contexts)
+        ]
+
+        # Sort by success rate
+        applicable.sort(key=lambda s: s.success_rate, reverse=True)
+
+        return applicable[:top_k]

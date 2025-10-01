@@ -1,0 +1,148 @@
+"""
+Console Mode Voice Handler (PyAudio - No Browser Needed)
+TRUE terminal-based voice interaction like livekit console
+"""
+import pyaudio
+import wave
+import io
+import sys
+import signal
+from loguru import logger
+from .stt import SpeechToText
+from .tts import TextToSpeech
+from .llm import LanguageModel
+
+class ConsoleVoiceHandler:
+    def __init__(self, llm_model: str = "gemma2:2b"):
+        self.stt = SpeechToText()
+        self.tts = TextToSpeech()
+        self.llm = LanguageModel(model=llm_model)
+
+        # Audio settings
+        self.CHUNK = 1024
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        self.pyaudio = pyaudio.PyAudio()
+        self.is_recording = False
+
+        logger.success("Console voice handler ready")
+
+    def record_audio(self) -> bytes:
+        """Record audio from microphone"""
+        logger.info("🎤 Listening... (Press Ctrl+C when done speaking)")
+
+        frames = []
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        self.is_recording = True
+
+        # Set up Ctrl+C handler
+        original_handler = signal.signal(signal.SIGINT, lambda sig, frame: self.stop_recording())
+
+        try:
+            while self.is_recording:
+                data = stream.read(self.CHUNK, exception_on_overflow=False)
+                frames.append(data)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.is_recording = False
+            signal.signal(signal.SIGINT, original_handler)
+
+        stream.stop_stream()
+        stream.close()
+
+        logger.info("Recording stopped")
+
+        # Convert to bytes
+        audio_data = b''.join(frames)
+        return audio_data
+
+    def stop_recording(self):
+        """Stop recording"""
+        self.is_recording = False
+
+    def play_audio(self, audio_data: bytes):
+        """Play audio through speakers"""
+        try:
+            stream = self.pyaudio.open(
+                format=self.FORMAT,
+                channels=self.CHANNELS,
+                rate=self.RATE,
+                output=True
+            )
+
+            stream.write(audio_data)
+            stream.stop_stream()
+            stream.close()
+
+        except Exception as e:
+            logger.error(f"Audio playback error: {e}")
+
+    def run_conversation(self, system_prompt: str):
+        """Run interactive voice conversation"""
+        print("\n" + "=" * 60)
+        print("🎙️  SOFIA - Console Voice Mode")
+        print("=" * 60)
+        print("💡 Instructions:")
+        print("   1. Speak your message")
+        print("   2. Press Ctrl+C when done speaking")
+        print("   3. Sofia will respond")
+        print("   4. Say 'goodbye' to end")
+        print("=" * 60 + "\n")
+
+        while True:
+            try:
+                # 1. Record audio
+                audio_data = self.record_audio()
+
+                if not audio_data:
+                    continue
+
+                # 2. Transcribe speech
+                print("🔄 Processing...")
+                transcript = self.stt.transcribe(audio_data)
+
+                if not transcript or transcript.strip() == "":
+                    print("❌ Could not understand audio. Please try again.\n")
+                    continue
+
+                print(f"📝 You said: {transcript}")
+
+                # Check for goodbye
+                if any(word in transcript.lower() for word in ["goodbye", "bye", "exit", "quit"]):
+                    print("\n👋 Sofia: Goodbye! Have a great day!")
+                    break
+
+                # 3. Get LLM response
+                response = self.llm.chat(transcript, system_prompt=system_prompt)
+                print(f"💬 Sofia: {response}")
+
+                # 4. Generate and play speech
+                print("🔊 Speaking...")
+                audio_response = self.tts.speak(response)
+
+                if audio_response:
+                    self.play_audio(audio_response)
+
+                print()  # New line for next interaction
+
+            except KeyboardInterrupt:
+                print("\n\n⚠️  Interrupted. Say 'goodbye' to end properly or press Ctrl+C again to force quit.")
+                continue
+            except Exception as e:
+                logger.error(f"Error in conversation: {e}")
+                print(f"❌ Error: {e}\n")
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.pyaudio.terminate()
+        logger.info("Console handler cleaned up")

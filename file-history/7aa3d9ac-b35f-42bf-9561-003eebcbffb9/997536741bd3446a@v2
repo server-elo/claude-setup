@@ -1,0 +1,27 @@
+# Core dependencies (pinned for reproducibility)
+requests==2.31.0
+pydantic==2.5.0
+anthropic==0.20.0
+supabase==2.2.0
+cryptography==42.0.0
+pyyaml==6.0.1
+python-dateutil==2.8.2
+tenacity==8.2.3
+
+# Testing and reporting
+pytest>=7.0.0
+sarif-om>=1.0.0
+jinja2>=3.1.2
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+rich>=13.0.0
+
+# API and notification
+fastapi>=0.95.0
+slack-sdk>=3.19.5
+cloudflare>=2.11.0
+
+# Web UI testing (Playwright)
+playwright>=1.40.0

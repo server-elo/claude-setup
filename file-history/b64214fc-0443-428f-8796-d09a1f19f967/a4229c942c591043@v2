@@ -1,0 +1,75 @@
+"""
+Speech-to-Text using Whisper (100% local, OpenAI Whisper)
+Supports German language for hotel receptionist
+"""
+import numpy as np
+import whisper
+from loguru import logger
+
+class SpeechToText:
+    def __init__(self, language="de", model_size="base"):
+        """
+        Initialize Whisper STT
+        language: 'de' for German, 'en' for English
+        model_size: 'tiny', 'base', 'small', 'medium', 'large' (base recommended for speed)
+        """
+        logger.info(f"Loading Whisper STT model ({model_size})...")
+
+        try:
+            self.model = whisper.load_model(model_size)
+            self.language = language
+            self.sample_rate = 16000
+            logger.success(f"Whisper STT loaded ({model_size}, language: {language})")
+        except Exception as e:
+            logger.error(f"Failed to load Whisper model: {e}")
+            logger.info("Install with: pip install openai-whisper")
+            raise
+
+    def transcribe(self, audio_data) -> str:
+        """Convert audio bytes to text"""
+        try:
+            # Convert bytes to numpy array
+            if isinstance(audio_data, bytes):
+                audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+            else:
+                audio_np = audio_data.astype(np.float32) / 32768.0
+
+            # Transcribe with Whisper
+            result = self.model.transcribe(
+                audio_np,
+                language=self.language,
+                fp16=False  # Use fp32 for CPU compatibility
+            )
+
+            transcript = result.get('text', '').strip()
+            logger.debug(f"Transcribed: {transcript}")
+            return transcript
+
+        except Exception as e:
+            logger.error(f"STT error: {e}")
+            return ""
+
+    def transcribe_stream(self, audio_stream):
+        """
+        Stream transcription (accumulates chunks)
+        Note: Whisper is not ideal for streaming, but this provides basic support
+        """
+        accumulated_audio = []
+
+        for audio_chunk in audio_stream:
+            accumulated_audio.append(audio_chunk)
+
+            # Process every ~1 second of audio
+            if len(accumulated_audio) >= 16:  # ~1 second at 16kHz with 1024-byte chunks
+                combined_audio = b''.join(accumulated_audio)
+                text = self.transcribe(combined_audio)
+                if text:
+                    yield text
+                accumulated_audio = []
+
+        # Final processing
+        if accumulated_audio:
+            combined_audio = b''.join(accumulated_audio)
+            text = self.transcribe(combined_audio)
+            if text:
+                yield text

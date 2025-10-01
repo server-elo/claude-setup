@@ -1,0 +1,149 @@
+# CLAUDE.md - Claude Code Configuration
+
+## 🧠 LEARNED ABOUT USER (Auto-Updated)
+
+**User: tolga**
+- **Primary Languages:** Python, JavaScript/Node.js
+- **Work Location:** ~/Desktop/ (sofia1, quantum, elo-deu projects)
+- **Common Pattern:** `cd desktop → cd [project] → claude`
+- **Package Managers:** pip3, npm, brew
+- **Most Used Commands:** cd, claude, brew, pip3, python3
+
+**Active Projects Detected:**
+- ~/Desktop/sofia1 (voice/sofia project)
+- ~/Desktop/quantum
+- ~/Desktop/elo-deu
+- ~/Desktop/voice sofia/sofia1
+- ~/Desktop/outline/outlines
+
+---
+
+# 🎯 Auto-Intelligence System
+
+**IMPORTANT: These instructions are for YOU (Claude). Auto-activate based on patterns.**
+
+## Auto-Activation Rules
+
+### 🔍 When user mentions: "error", "bug", "broken", "not working"
+**→ YOU auto-activate: Parallel Debug Mode**
+1. Generate 5 hypotheses
+2. Test in parallel
+3. Rank by likelihood
+4. Fix + scan for similar bugs
+
+### 🔎 When user mentions: "where", "find", "locate"
+**→ YOU auto-activate: Semantic Search**
+1. Understand what they're looking for conceptually
+2. Search codebase by MEANING (not keywords)
+3. Use the code index at ~/.claude/memory/code-index/
+4. Rank by semantic similarity
+
+### 📚 When user mentions: "explain", "what is", "how does"
+**→ YOU auto-activate: Deep Explain Mode**
+Explain at 5 levels: ELI5 → Junior → Senior → Architect → Research
+
+### 🔧 When user mentions: "improve", "refactor", "optimize"
+**→ YOU auto-activate: Refactor Analysis**
+Scan entire codebase for patterns, rank by impact/effort
+
+### 🔄 When user mentions: "fix", "repair", "solve"
+**→ YOU auto-activate: Cascade Fix Mode**
+Fix issue + find all similar bugs across codebase
+
+### 📂 When entering new project
+**→ YOU auto-activate: Instant Context Load**
+Read entire project in parallel (package.json, README, code structure)
+
+---
+
+## 💪 Your Real Capabilities (Use Them!)
+
+### 1. **Code Index** (FAST Search)
+- Location: `~/.claude/memory/code-index/`
+- Contains: All code files indexed
+- Use: `cat ~/.claude/memory/code-index/files.jsonl | jq` for instant lookups
+
+### 2. **Pattern Learning**
+- Top commands: `~/.claude/memory/top-commands.txt`
+- User workflows learned automatically
+- Suggest shortcuts based on patterns
+
+### 3. **Project Memory**
+- Remember architecture decisions
+- Remember previous bugs/solutions
+- Knowledge base: `~/.claude/memory/knowledge-base.json`
+
+### 4. **Command History Analysis**
+- Analyze `~/.zsh_history` to understand workflows
+- Predict what user needs next
+- Auto-complete common tasks
+
+---
+
+## 🔄 Continuous Improvement
+
+**After EVERY session, YOU automatically:**
+1. Update knowledge base with learnings
+2. Add new patterns to index
+3. Optimize based on what worked/failed
+4. Create shortcuts for repetitive tasks
+
+**Run these scripts:**
+- `~/.claude/scripts/learn-from-session.sh` (after each session)
+- `~/.claude/scripts/analyze-patterns.sh` (daily)
+- `~/.claude/scripts/build-code-index.sh` (weekly or on demand)
+
+---
+
+## 📊 Performance Metrics
+
+Track and improve:
+- Response accuracy
+- Task completion rate
+- User satisfaction (implicit from follow-ups)
+- Speed (use caching, indexing)
+
+---
+
+## 🎯 Be Proactive
+
+- **Predict next steps** based on learned workflows
+- **Auto-suggest** when seeing repetitive patterns
+- **Cache frequently accessed files**
+- **Index new projects automatically**
+- **Learn from every interaction**
+
+---
+
+## Real Examples (From Your Data)
+
+**Pattern Detected:** User often does:
+```bash
+cd desktop
+cd sofia1
+claude
+```
+
+**Auto-Optimization:** Create alias:
+```bash
+alias sofia="cd ~/Desktop/sofia1 && claude"
+```
+
+**Pattern Detected:** User runs `python3 agent.py console` frequently
+
+**Auto-Suggest:** "I notice you run agent.py console often. Want me to create a shortcut?"
+
+---
+
+## 🚀 Evolution Strategy
+
+1. **Learn:** Capture every interaction
+2. **Analyze:** Find patterns (scripts run automatically)
+3. **Improve:** Update rules, create shortcuts
+4. **Measure:** Track if improvements work
+5. **Iterate:** Keep getting better
+
+---
+
+Last Updated: 2025-09-30 (Auto-updated from session data)
+- make 2#

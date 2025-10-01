@@ -1,0 +1,353 @@
+"""
+LIVEKIT-LEVEL LATENCY Console Handler
+Full streaming pipeline with overlap processing and barge-in
+"""
+import pyaudio
+import wave
+import io
+import sys
+import threading
+import queue
+import webrtcvad
+import collections
+import time
+from loguru import logger
+from .stt import SpeechToText
+from .tts import TextToSpeech
+from .llm import LanguageModel
+
+class LiveKitLatencyHandler:
+    def __init__(self, llm_model: str = "gemma2:2b", language: str = "de"):
+        """Initialize with ULTRA LOW LATENCY streaming pipeline"""
+        logger.info("Initializing LIVEKIT-LEVEL LATENCY handler...")
+
+        # Components
+        self.stt = SpeechToText(language=language)
+        self.tts = TextToSpeech()
+        self.llm = LanguageModel(model=llm_model)
+
+        # Audio settings - optimized for minimum latency
+        self.CHUNK = 480  # 30ms at 16kHz
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        # VAD for speech detection
+        self.vad = webrtcvad.Vad(3)  # Most aggressive
+
+        # Streaming queues for PIPELINE OVERLAP
+        self.audio_chunks_queue = queue.Queue()  # Raw audio chunks
+        self.stt_queue = queue.Queue()           # Partial transcriptions
+        self.llm_token_queue = queue.Queue()     # LLM tokens as they arrive
+        self.tts_audio_queue = queue.Queue()     # TTS audio chunks
+
+        # Control flags
+        self.is_listening = False
+        self.is_speaking = False  # TRUE when AI is speaking (disable mic)
+        self.interrupt_speech = False
+        self.mic_enabled = True  # Control microphone on/off
+
+        # Performance tracking
+        self.latency_stats = {
+            'speech_detected': 0,
+            'first_stt_token': 0,
+            'first_llm_token': 0,
+            'first_tts_audio': 0,
+            'first_audio_play': 0
+        }
+
+        self.pyaudio = pyaudio.PyAudio()
+
+        logger.success("LIVEKIT-LEVEL LATENCY handler ready")
+
+    def is_speech(self, audio_chunk: bytes) -> bool:
+        """VAD speech detection"""
+        try:
+            return self.vad.is_speech(audio_chunk, self.RATE)
+        except:
+            return False
+
+    def continuous_audio_capture(self):
+        """THREAD 1: Continuously capture audio chunks"""
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        ring_buffer = collections.deque(maxlen=30)
+        speech_active = False
+        silence_count = 0
+        silence_threshold = 33  # ~1 second
+
+        try:
+            while self.is_listening:
+                # CRITICAL: Skip audio capture when AI is speaking
+                if self.is_speaking:
+                    time.sleep(0.01)  # Sleep while AI speaks
+                    continue
+
+                chunk = stream.read(self.CHUNK, exception_on_overflow=False)
+                is_speech_chunk = self.is_speech(chunk)
+
+                if not speech_active:
+                    ring_buffer.append((chunk, is_speech_chunk))
+                    if is_speech_chunk and not self.is_speaking:
+                        logger.info("Speech detected")
+                        self.latency_stats['speech_detected'] = time.time()
+                        speech_active = True
+                        # Send buffered audio
+                        for buffered_chunk, _ in ring_buffer:
+                            self.audio_chunks_queue.put(buffered_chunk)
+                        self.audio_chunks_queue.put(chunk)
+                        silence_count = 0
+                else:
+                    self.audio_chunks_queue.put(chunk)
+
+                    if is_speech_chunk:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+
+                    if silence_count >= silence_threshold:
+                        logger.info("Speech ended")
+                        self.audio_chunks_queue.put(None)  # End marker
+                        speech_active = False
+                        silence_count = 0
+                        ring_buffer.clear()
+
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+    def streaming_stt_processor(self):
+        """THREAD 2: Process audio chunks → Whisper STT"""
+        import numpy as np
+
+        accumulated_audio = []
+
+        while self.is_listening:
+            try:
+                chunk = self.audio_chunks_queue.get(timeout=0.1)
+
+                if chunk is None:  # End of speech
+                    if accumulated_audio:
+                        # Combine all audio chunks
+                        combined_audio = b''.join(accumulated_audio)
+
+                        # Transcribe with Whisper
+                        final_text = self.stt.transcribe(combined_audio)
+
+                        if final_text:
+                            self.stt_queue.put(('FINAL', final_text))
+                            logger.info(f"Final transcript: {final_text}")
+
+                            if not self.latency_stats.get('first_stt_token'):
+                                self.latency_stats['first_stt_token'] = time.time()
+
+                    # Reset accumulator
+                    accumulated_audio = []
+                    continue
+
+                # Accumulate audio chunks
+                accumulated_audio.append(chunk)
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"STT error: {e}")
+
+    def streaming_llm_processor(self, system_prompt: str):
+        """THREAD 3: IMMEDIATE LLM streaming - Send first sentence ASAP"""
+        from ollama import chat as ollama_chat
+
+        while self.is_listening:
+            try:
+                marker, transcript = self.stt_queue.get(timeout=0.1)
+
+                if marker == 'FINAL':
+                    print(f"\nSie: {transcript}")
+
+                    if any(word in transcript.lower() for word in ["auf wiedersehen", "tschüss", "beenden"]):
+                        self.stt_queue.put(('EXIT', transcript))
+                        break
+
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": transcript}
+                    ]
+
+                    sentence_buffer = ""
+                    print("Sofia: ", end="", flush=True)
+
+                    for chunk in ollama_chat(
+                        model=self.llm.model,
+                        messages=messages,
+                        stream=True,
+                        options={"num_predict": 150, "temperature": 0.7}
+                    ):
+                        if "message" in chunk and "content" in chunk["message"]:
+                            token = chunk["message"]["content"]
+                            sentence_buffer += token
+                            print(token, end="", flush=True)
+
+                            if not self.latency_stats.get('first_llm_token'):
+                                self.latency_stats['first_llm_token'] = time.time()
+
+                            # IMMEDIATE dispatch on sentence boundaries
+                            if any(p in token for p in ['.', '!', '?']):
+                                if sentence_buffer.strip():
+                                    self.llm_token_queue.put(('SENTENCE', sentence_buffer.strip()))
+                                    sentence_buffer = ""
+
+                    if sentence_buffer.strip():
+                        self.llm_token_queue.put(('SENTENCE', sentence_buffer.strip()))
+
+                    self.llm_token_queue.put(('DONE', None))
+                    print()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"LLM error: {e}")
+
+    def streaming_tts_processor(self):
+        """THREAD 4: INSTANT TTS - Generate and play while LLM still writing"""
+        import asyncio
+
+        while self.is_listening:
+            try:
+                marker, text = self.llm_token_queue.get(timeout=0.1)
+
+                if marker == 'SENTENCE':
+                    # TTS generates IMMEDIATELY while LLM still generating rest
+                    audio_data = asyncio.run(self.tts._generate_audio(text))
+
+                    if audio_data:
+                        self.tts_audio_queue.put(audio_data)
+                        if not self.latency_stats.get('first_tts_audio'):
+                            self.latency_stats['first_tts_audio'] = time.time()
+                            logger.info("SPEAKING FIRST SENTENCE while LLM generates rest!")
+
+                elif marker == 'DONE':
+                    self.tts_audio_queue.put(None)
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"TTS error: {e}")
+
+    def streaming_audio_player(self):
+        """THREAD 5: INSTANT playback - DISABLES MIC during playback"""
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            output=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        try:
+            while self.is_listening:
+                try:
+                    audio_data = self.tts_audio_queue.get(timeout=0.1)
+
+                    if audio_data is None:
+                        self.is_speaking = False  # Re-enable mic
+                        continue
+
+                    if not self.latency_stats.get('first_audio_play'):
+                        self.latency_stats['first_audio_play'] = time.time()
+                        self.print_latency_stats()
+
+                    # DISABLE MICROPHONE while speaking
+                    self.is_speaking = True
+                    logger.debug("AI speaking - microphone disabled")
+
+                    # Play audio
+                    chunk_size = self.CHUNK * 2
+                    for i in range(0, len(audio_data), chunk_size):
+                        if self.interrupt_speech:
+                            break
+                        stream.write(audio_data[i:i + chunk_size])
+
+                    # Keep mic disabled for 200ms after audio ends (echo buffer)
+                    time.sleep(0.2)
+                    self.is_speaking = False
+                    logger.debug("AI finished - microphone enabled")
+
+                except queue.Empty:
+                    continue
+
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+    def print_latency_stats(self):
+        """Print latency breakdown"""
+        if not self.latency_stats.get('speech_detected'):
+            return
+
+        base = self.latency_stats['speech_detected']
+
+        print("\n--- LATENCY BREAKDOWN ---")
+        if self.latency_stats.get('first_stt_token'):
+            print(f"Speech → First STT Token: {(self.latency_stats['first_stt_token'] - base) * 1000:.0f}ms")
+        if self.latency_stats.get('first_llm_token'):
+            print(f"STT → First LLM Token: {(self.latency_stats['first_llm_token'] - self.latency_stats.get('first_stt_token', base)) * 1000:.0f}ms")
+        if self.latency_stats.get('first_tts_audio'):
+            print(f"LLM → First TTS Audio: {(self.latency_stats['first_tts_audio'] - self.latency_stats.get('first_llm_token', base)) * 1000:.0f}ms")
+        if self.latency_stats.get('first_audio_play'):
+            print(f"TTS → First Audio Play: {(self.latency_stats['first_audio_play'] - self.latency_stats.get('first_tts_audio', base)) * 1000:.0f}ms")
+            print(f"TOTAL (Speech → Audio): {(self.latency_stats['first_audio_play'] - base) * 1000:.0f}ms")
+        print("-------------------------\n")
+
+        # Reset stats
+        self.latency_stats = {k: 0 for k in self.latency_stats}
+
+    def run_conversation(self, system_prompt: str):
+        """Run ULTRA LOW LATENCY streaming conversation"""
+        print("\n" + "=" * 60)
+        print("SOFIA - LIVEKIT-LEVEL LATENCY MODE")
+        print("=" * 60)
+        print("Features:")
+        print("  - Full streaming pipeline (STT + LLM + TTS)")
+        print("  - Sentence-by-sentence TTS generation")
+        print("  - Overlapping processing for minimum latency")
+        print("  - Automatic speech detection")
+        print("  - Say 'Auf Wiedersehen' to end")
+        print("=" * 60)
+        print("\nWarte auf Ihre Stimme...\n")
+
+        self.is_listening = True
+
+        # Start all parallel threads
+        threads = [
+            threading.Thread(target=self.continuous_audio_capture, daemon=True),
+            threading.Thread(target=self.streaming_stt_processor, daemon=True),
+            threading.Thread(target=self.streaming_llm_processor, args=(system_prompt,), daemon=True),
+            threading.Thread(target=self.streaming_tts_processor, daemon=True),
+            threading.Thread(target=self.streaming_audio_player, daemon=True),
+        ]
+
+        for t in threads:
+            t.start()
+
+        try:
+            # Main thread monitors for exit
+            while self.is_listening:
+                time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            print("\n\nNotfall-Stopp. Auf Wiedersehen.")
+        finally:
+            self.is_listening = False
+            time.sleep(0.5)  # Let threads finish
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.is_listening = False
+        self.pyaudio.terminate()
+        logger.info("LiveKit-level handler cleaned up")

@@ -1,0 +1,26 @@
+# Sofia Local - 100% Free & Open Source Voice AI
+# Zero cloud costs, everything runs locally
+# German Hotel Receptionist Edition - LOW LATENCY
+
+# Voice Processing (100% Local)
+openai-whisper>=20231117       # Speech-to-Text (OpenAI Whisper - multilingual)
+piper-tts>=1.2.0              # Text-to-Speech (Piper - fast, local)
+pyaudio                        # Console audio I/O
+webrtcvad                      # Voice activity detection
+
+# LLM (Local)
+ollama>=0.4.7                  # Local LLM interface
+
+# Console & Terminal
+loguru>=0.7.3                  # Better logging
+python-dotenv                  # Environment config
+
+# Core utilities
+numpy                          # Audio processing
+python-dateutil                # Date/time utilities
+requests                       # HTTP requests
+aiohttp                        # Async HTTP
+soundfile                      # Audio file I/O
+
+# Async support (for Edge TTS)
+asyncio                        # Async operations

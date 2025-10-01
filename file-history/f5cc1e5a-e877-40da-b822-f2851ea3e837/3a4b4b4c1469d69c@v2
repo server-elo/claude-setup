@@ -1,0 +1,203 @@
+"""
+LOW LATENCY Console Voice Handler with Streaming Pipeline
+Uses parallel processing and streaming for minimal latency
+"""
+import pyaudio
+import wave
+import io
+import sys
+import signal
+import threading
+import queue
+from loguru import logger
+from .stt import SpeechToText
+from .tts import TextToSpeech
+from .llm import LanguageModel
+
+class StreamingConsoleVoiceHandler:
+    def __init__(self, llm_model: str = "gemma2:2b", language: str = "de"):
+        """Initialize with streaming and parallel processing"""
+        logger.info("Initializing LOW LATENCY streaming voice handler...")
+
+        # Components
+        self.stt = SpeechToText(language=language)
+        self.tts = TextToSpeech()
+        self.llm = LanguageModel(model=llm_model)
+
+        # Audio settings optimized for low latency
+        self.CHUNK = 512  # Smaller chunks = lower latency
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        self.pyaudio = pyaudio.PyAudio()
+        self.is_recording = False
+
+        # Parallel processing queues
+        self.audio_queue = queue.Queue()
+        self.transcription_queue = queue.Queue()
+        self.response_queue = queue.Queue()
+        self.tts_queue = queue.Queue()
+
+        logger.success("✅ Streaming console handler ready (LOW LATENCY MODE)")
+
+    def record_audio_streaming(self) -> bytes:
+        """Record audio with voice activity detection"""
+        logger.info("🎤 Listening... (Press Ctrl+C when done speaking)")
+
+        frames = []
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        self.is_recording = True
+        original_handler = signal.signal(signal.SIGINT, lambda sig, frame: self.stop_recording())
+
+        try:
+            while self.is_recording:
+                data = stream.read(self.CHUNK, exception_on_overflow=False)
+                frames.append(data)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.is_recording = False
+            signal.signal(signal.SIGINT, original_handler)
+
+        stream.stop_stream()
+        stream.close()
+
+        logger.info("Recording stopped")
+        return b''.join(frames)
+
+    def stop_recording(self):
+        """Stop recording"""
+        self.is_recording = False
+
+    def play_audio_streaming(self, audio_data: bytes):
+        """Play audio with minimal buffering"""
+        try:
+            stream = self.pyaudio.open(
+                format=self.FORMAT,
+                channels=self.CHANNELS,
+                rate=self.RATE,
+                output=True,
+                frames_per_buffer=self.CHUNK  # Small buffer for low latency
+            )
+
+            # Play in chunks for lower latency
+            chunk_size = self.CHUNK * 2
+            for i in range(0, len(audio_data), chunk_size):
+                stream.write(audio_data[i:i + chunk_size])
+
+            stream.stop_stream()
+            stream.close()
+
+        except Exception as e:
+            logger.error(f"Audio playback error: {e}")
+
+    def parallel_process(self, audio_data: bytes, system_prompt: str):
+        """Process audio → STT → LLM → TTS in parallel pipeline"""
+
+        # Thread 1: Transcription
+        def transcribe():
+            transcript = self.stt.transcribe(audio_data)
+            self.transcription_queue.put(transcript)
+            logger.debug(f"Transcription done: {transcript[:50]}...")
+
+        # Thread 2: LLM response (waits for transcription)
+        def get_response():
+            transcript = self.transcription_queue.get()
+            if transcript:
+                response = self.llm.chat(transcript, system_prompt=system_prompt)
+                self.response_queue.put((transcript, response))
+                logger.debug(f"LLM response done: {response[:50]}...")
+            else:
+                self.response_queue.put((None, None))
+
+        # Thread 3: TTS generation (waits for LLM)
+        def generate_speech():
+            transcript, response = self.response_queue.get()
+            if response:
+                audio = self.tts.speak(response)
+                self.tts_queue.put((transcript, response, audio))
+                logger.debug("TTS generation done")
+            else:
+                self.tts_queue.put((None, None, None))
+
+        # Start all threads in parallel
+        t1 = threading.Thread(target=transcribe)
+        t2 = threading.Thread(target=get_response)
+        t3 = threading.Thread(target=generate_speech)
+
+        t1.start()
+        t2.start()
+        t3.start()
+
+        # Wait for pipeline to complete
+        t1.join()
+        t2.join()
+        t3.join()
+
+        # Get final result
+        return self.tts_queue.get()
+
+    def run_conversation(self, system_prompt: str):
+        """Run LOW LATENCY interactive voice conversation"""
+        print("\n" + "=" * 60)
+        print("🎙️  SOFIA - LOW LATENCY STREAMING MODE")
+        print("=" * 60)
+        print("💡 Instructions:")
+        print("   1. Speak your message")
+        print("   2. Press Ctrl+C when done speaking")
+        print("   3. Sofia responds immediately (streaming)")
+        print("   4. Say 'auf wiedersehen' to end")
+        print("=" * 60 + "\n")
+
+        while True:
+            try:
+                # 1. Record audio
+                audio_data = self.record_audio_streaming()
+
+                if not audio_data:
+                    continue
+
+                print("⚡ Processing (LOW LATENCY)...")
+
+                # 2. Parallel pipeline: STT → LLM → TTS
+                transcript, response, audio = self.parallel_process(audio_data, system_prompt)
+
+                if not transcript or transcript.strip() == "":
+                    print("❌ Could not understand audio. Please try again.\n")
+                    continue
+
+                print(f"📝 You said: {transcript}")
+
+                # Check for goodbye
+                if any(word in transcript.lower() for word in ["auf wiedersehen", "tschüss", "bye", "exit", "quit"]):
+                    print("\n👋 Sofia: Auf Wiedersehen! Ich wünsche Ihnen einen schönen Tag!")
+                    break
+
+                print(f"💬 Sofia: {response}")
+
+                # 3. Play speech
+                if audio:
+                    print("🔊 Speaking...")
+                    self.play_audio_streaming(audio)
+
+                print()  # New line for next interaction
+
+            except KeyboardInterrupt:
+                print("\n\n⚠️  Interrupted. Say 'auf wiedersehen' to end properly or press Ctrl+C again to force quit.")
+                continue
+            except Exception as e:
+                logger.error(f"Error in conversation: {e}")
+                print(f"❌ Error: {e}\n")
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.pyaudio.terminate()
+        logger.info("Streaming console handler cleaned up")

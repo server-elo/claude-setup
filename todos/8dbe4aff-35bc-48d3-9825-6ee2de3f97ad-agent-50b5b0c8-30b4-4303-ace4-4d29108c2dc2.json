@@ -1,0 +1,32 @@
+[
+  {
+    "content": "Analyze project structure and identify main project files",
+    "status": "in_progress",
+    "activeForm": "Analyzing project structure and identifying main project files"
+  },
+  {
+    "content": "Examine build and development configuration files",
+    "status": "pending",
+    "activeForm": "Examining build and development configuration files"
+  },
+  {
+    "content": "Identify programming languages and frameworks used",
+    "status": "pending",
+    "activeForm": "Identifying programming languages and frameworks used"
+  },
+  {
+    "content": "Analyze directory structure and architecture patterns",
+    "status": "pending",
+    "activeForm": "Analyzing directory structure and architecture patterns"
+  },
+  {
+    "content": "Check for existing documentation and development guidelines",
+    "status": "pending",
+    "activeForm": "Checking for existing documentation and development guidelines"
+  },
+  {
+    "content": "Compile comprehensive analysis report",
+    "status": "pending",
+    "activeForm": "Compiling comprehensive analysis report"
+  }
+]

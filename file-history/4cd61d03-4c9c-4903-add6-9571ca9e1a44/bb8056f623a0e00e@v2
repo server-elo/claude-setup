@@ -1,0 +1,346 @@
+#!/bin/bash
+# MAX POWER Learning Daemon - Deep intelligence extraction
+
+DAEMON_PID="$HOME/.claude/daemon.pid"
+MEMORY_DIR="$HOME/.claude/memory"
+LOG="$HOME/.claude/logs/learning-daemon.log"
+INTERVAL=1800 # 30 minutes (was 1 hour - now faster)
+
+mkdir -p "$MEMORY_DIR" "$(dirname "$LOG")"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
+}
+
+# Check if daemon already running
+if [ -f "$DAEMON_PID" ] && kill -0 $(cat "$DAEMON_PID") 2>/dev/null; then
+    log "⚠️  Daemon already running (PID: $(cat "$DAEMON_PID"))"
+    exit 0
+fi
+
+# Save PID
+echo $$ > "$DAEMON_PID"
+log "🚀 Learning daemon started (PID: $$)"
+
+# Cleanup on exit
+trap "rm -f $DAEMON_PID; log '🛑 Daemon stopped'" EXIT INT TERM
+
+# Main learning loop
+while true; do
+    log "🧠 Learning cycle started..."
+
+    # 1. DEEP command pattern analysis
+    analyze_commands() {
+        log "  📊 Deep command analysis..."
+
+        # Top commands (full history, not just 1000)
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            awk '{print $1}' | \
+            sort | uniq -c | sort -rn | head -50 \
+            > "$MEMORY_DIR/top-commands.txt"
+
+        # Project-specific workflows
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            grep -E "(cd |python|npm|git|docker|kubectl|terraform)" | \
+            sort | uniq -c | sort -rn \
+            > "$MEMORY_DIR/project-commands.txt"
+
+        # Detect command chains (pipes, &&, ;)
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            grep -E '(\||&&|;)' | \
+            sort | uniq -c | sort -rn | head -20 \
+            > "$MEMORY_DIR/command-chains.txt"
+
+        # Time-based patterns (what you run at different times)
+        cat ~/.zsh_history | \
+            awk -F';' '{
+                timestamp = $1;
+                cmd = $2;
+                hour = strftime("%H", timestamp);
+                print hour, cmd;
+            }' 2>/dev/null | \
+            sort | uniq -c | sort -rn \
+            > "$MEMORY_DIR/time-patterns.txt" || true
+
+        # Error-prone commands (commands you retry)
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            uniq -c | awk '$1 > 2 {print}' | sort -rn \
+            > "$MEMORY_DIR/retry-commands.txt"
+    }
+
+    # 2. INTELLIGENT project memory system
+    update_project_memories() {
+        log "  📂 Deep project analysis..."
+
+        mkdir -p "$MEMORY_DIR/projects"
+
+        # Scan ALL projects, not just Desktop
+        for search_dir in ~/Desktop ~/Documents ~/Projects; do
+            [ -d "$search_dir" ] || continue
+
+            # Find projects by markers (parallel processing)
+            find "$search_dir" -maxdepth 3 -type f \( \
+                -name "package.json" -o \
+                -name "requirements.txt" -o \
+                -name "pyproject.toml" -o \
+                -name "go.mod" -o \
+                -name "Cargo.toml" -o \
+                -name "pom.xml" \
+            \) 2>/dev/null | while read marker; do
+                project=$(dirname "$marker")
+                project_name=$(basename "$project")
+                memory_file="$MEMORY_DIR/projects/$project_name.json"
+
+                # Extract project intelligence
+                project_type="unknown"
+                main_language="unknown"
+                entry_point="unknown"
+
+                [ -f "$project/package.json" ] && project_type="node" && main_language="javascript"
+                [ -f "$project/requirements.txt" ] && project_type="python" && main_language="python"
+                [ -f "$project/go.mod" ] && project_type="go" && main_language="go"
+                [ -f "$project/Cargo.toml" ] && project_type="rust" && main_language="rust"
+
+                # Detect entry points
+                if [ "$project_type" = "python" ]; then
+                    entry_point=$(find "$project" -maxdepth 2 -name "main.py" -o -name "app.py" -o -name "agent.py" | head -1)
+                elif [ "$project_type" = "node" ]; then
+                    entry_point=$(jq -r '.main // "index.js"' "$project/package.json" 2>/dev/null)
+                fi
+
+                # Extract dependencies count
+                dep_count=0
+                [ -f "$project/package.json" ] && dep_count=$(jq '.dependencies | length' "$project/package.json" 2>/dev/null || echo 0)
+                [ -f "$project/requirements.txt" ] && dep_count=$(wc -l < "$project/requirements.txt" 2>/dev/null || echo 0)
+
+                # Git info
+                git_branch="none"
+                git_dirty="false"
+                if [ -d "$project/.git" ]; then
+                    git_branch=$(cd "$project" && git branch --show-current 2>/dev/null || echo "unknown")
+                    [ -n "$(cd "$project" && git status --short 2>/dev/null)" ] && git_dirty="true"
+                fi
+
+                # Commands run in this project
+                project_commands=$(cat ~/.zsh_history | grep -F "$project" | sed 's/.*;//' | sort | uniq -c | sort -rn | head -5 | \
+                    awk '{$1=""; print $0}' | sed 's/^ //' | jq -R . | jq -s . 2>/dev/null || echo '[]')
+
+                # Create rich memory
+                cat > "$memory_file" <<EOF
+{
+  "name": "$project_name",
+  "path": "$project",
+  "type": "$project_type",
+  "language": "$main_language",
+  "entry_point": "$entry_point",
+  "dependencies": $dep_count,
+  "git": {
+    "branch": "$git_branch",
+    "dirty": $git_dirty
+  },
+  "last_scanned": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "file_count": $(find "$project" -type f ! -path "*/node_modules/*" ! -path "*/.venv/*" ! -path "*/.git/*" | wc -l),
+  "recent_commands": $project_commands
+}
+EOF
+            done &
+
+            # Limit parallel jobs
+            if [ $(jobs -r | wc -l) -ge 12 ]; then
+                wait -n
+            fi
+        done
+
+        wait
+    }
+
+    # 3. Learn from Claude history
+    learn_from_history() {
+        log "  📖 Learning from session history..."
+
+        if [ -f ~/.claude/history.jsonl ]; then
+            # Extract patterns from last 50 interactions
+            tail -50 ~/.claude/history.jsonl | \
+                jq -r '.display' 2>/dev/null | \
+                grep -v "^$" | \
+                sort | uniq -c | sort -rn \
+                > "$MEMORY_DIR/interaction-patterns.txt" 2>/dev/null || true
+        fi
+    }
+
+    # 4. SMART shortcut generation with auto-creation
+    suggest_shortcuts() {
+        log "  💡 Smart shortcut generation..."
+
+        > "$MEMORY_DIR/shortcut-suggestions.txt"
+
+        # Commands used 5+ times → create shortcuts
+        awk '$1 >= 5 {print $1, $2}' "$MEMORY_DIR/top-commands.txt" 2>/dev/null | \
+            while read count cmd; do
+                # Skip if already aliased
+                grep -q "alias.*$cmd" ~/.zshrc 2>/dev/null && continue
+
+                # Generate intelligent shortcut name
+                case "$cmd" in
+                    python3) shortcut="py" ;;
+                    pip3) shortcut="pi" ;;
+                    docker) shortcut="dk" ;;
+                    kubectl) shortcut="k" ;;
+                    terraform) shortcut="tf" ;;
+                    git) continue ;; # git is short enough
+                    *) shortcut="${cmd:0:2}" ;;
+                esac
+
+                echo "alias $shortcut='$cmd'  # Used $count times" >> "$MEMORY_DIR/shortcut-suggestions.txt"
+            done
+
+        # Detect complex command patterns
+        if [ -f "$MEMORY_DIR/command-chains.txt" ]; then
+            head -5 "$MEMORY_DIR/command-chains.txt" | while read count chain; do
+                # Extract common patterns
+                echo "# Complex pattern (used $count times): $chain" >> "$MEMORY_DIR/shortcut-suggestions.txt"
+            done
+        fi
+
+        # Project-specific shortcuts
+        cat ~/.zsh_history | \
+            grep -E "cd .*/Desktop/.* && " | \
+            sed 's/.*;//' | sort | uniq -c | sort -rn | head -5 | \
+            while read count command; do
+                echo "# Frequent workflow: $command (used $count times)" >> "$MEMORY_DIR/shortcut-suggestions.txt"
+            done
+    }
+
+    # 5. PREDICT next actions based on patterns
+    predict_next_actions() {
+        log "  🔮 Predictive analysis..."
+
+        # Detect command sequences (what comes after what)
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            awk 'NR>1{print prev, "→", $1} {prev=$1}' | \
+            sort | uniq -c | sort -rn | head -20 \
+            > "$MEMORY_DIR/command-sequences.txt"
+
+        # Detect git workflow patterns
+        cat ~/.zsh_history | \
+            grep "git " | sed 's/.*;//' | \
+            awk '{print $2}' | \
+            awk 'NR>1{print prev, "→", $1} {prev=$1}' | \
+            sort | uniq -c | sort -rn \
+            > "$MEMORY_DIR/git-workflows.txt"
+    }
+
+    # 6. ERROR pattern detection
+    detect_errors() {
+        log "  ⚠️  Error pattern detection..."
+
+        # Commands that often get retried (potential errors)
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            uniq -c | awk '$1 >= 3 {print $0}' | \
+            sort -rn > "$MEMORY_DIR/error-prone-commands.txt"
+
+        # Common error keywords in history
+        cat ~/.zsh_history | \
+            sed 's/.*;//' | \
+            grep -iE "(error|failed|denied|not found|cannot)" | \
+            sort | uniq -c | sort -rn \
+            > "$MEMORY_DIR/error-patterns.txt" || true
+    }
+
+    # 7. PERFORMANCE optimization hints
+    generate_optimizations() {
+        log "  ⚡ Generating optimizations..."
+
+        # Detect slow patterns
+        {
+            # Large file operations
+            echo "# Slow operations detected:"
+            cat ~/.zsh_history | grep -E "(find|grep|ack) " | sed 's/.*;//' | sort | uniq -c | sort -rn | head -3
+            echo ""
+            echo "# Optimization: Use 'rg' instead of 'grep', 'fd' instead of 'find'"
+            echo ""
+
+            # Repeated installs
+            echo "# Repeated package installs:"
+            cat ~/.zsh_history | grep -E "(npm install|pip install|brew install)" | sed 's/.*;//' | sort | uniq -c | sort -rn | head -3
+        } > "$MEMORY_DIR/optimization-hints.txt"
+    }
+
+    # 5. Update knowledge base metrics
+    update_metrics() {
+        log "  📈 Updating metrics..."
+
+        # Count sessions, patterns, etc
+        session_count=$(wc -l < ~/.claude/history.jsonl 2>/dev/null || echo 0)
+        pattern_count=$(wc -l < "$MEMORY_DIR/interaction-patterns.txt" 2>/dev/null || echo 0)
+
+        # Update knowledge base with SAFE file locking
+        if [ -f "$MEMORY_DIR/knowledge-base.json" ]; then
+            ~/.claude/scripts/safe-json-update.sh \
+                "$MEMORY_DIR/knowledge-base.json" \
+                ".metrics.total_sessions = $session_count | .metrics.patterns_detected = $pattern_count | .last_learning_cycle = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"" \
+                2>/dev/null || log "⚠️  Failed to update knowledge base"
+        fi
+    }
+
+    # Execute ALL learning functions IN PARALLEL (12 cores) with error tracking
+    declare -A job_pids
+    declare -A job_status
+
+    analyze_commands &
+    job_pids[analyze_commands]=$!
+
+    update_project_memories &
+    job_pids[update_project_memories]=$!
+
+    learn_from_history &
+    job_pids[learn_from_history]=$!
+
+    suggest_shortcuts &
+    job_pids[suggest_shortcuts]=$!
+
+    predict_next_actions &
+    job_pids[predict_next_actions]=$!
+
+    detect_errors &
+    job_pids[detect_errors]=$!
+
+    generate_optimizations &
+    job_pids[generate_optimizations]=$!
+
+    # Wait for all parallel tasks and track failures
+    failed_count=0
+    for func in "${!job_pids[@]}"; do
+        if wait "${job_pids[$func]}"; then
+            job_status[$func]="✅"
+        else
+            job_status[$func]="❌"
+            log "⚠️  $func FAILED (exit code: $?)"
+            ((failed_count++))
+        fi
+    done
+
+    # Update metrics last
+    update_metrics
+
+    # Report failures
+    if [ $failed_count -gt 0 ]; then
+        log "⚠️  $failed_count learning functions failed this cycle"
+    fi
+
+    log "✅ Learning cycle complete"
+    log "📊 Knowledge extracted:"
+    log "   - $(wc -l < "$MEMORY_DIR/top-commands.txt" 2>/dev/null || echo 0) top commands"
+    log "   - $(ls "$MEMORY_DIR/projects" | wc -l 2>/dev/null || echo 0) projects analyzed"
+    log "   - $(wc -l < "$MEMORY_DIR/shortcut-suggestions.txt" 2>/dev/null || echo 0) shortcuts suggested"
+    log "   - $(wc -l < "$MEMORY_DIR/command-sequences.txt" 2>/dev/null || echo 0) patterns detected"
+    log "⏳ Next cycle in $((INTERVAL/60)) minutes..."
+
+    sleep $INTERVAL
+done

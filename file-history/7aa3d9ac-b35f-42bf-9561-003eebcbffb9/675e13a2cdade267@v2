@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""
+Quick integration test to verify all fixes work together.
+This doesn't hit any real APIs - just validates imports and basic functionality.
+"""
+
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.append(str(Path(__file__).parent / "src"))
+
+def test_imports():
+    """Test that all modules import correctly."""
+    print("Testing imports...")
+
+    try:
+        from judge.evaluator import ResponseEvaluator
+        print("✓ ResponseEvaluator imports")
+    except Exception as e:
+        print(f"✗ ResponseEvaluator import failed: {e}")
+        return False
+
+    try:
+        from judge.evaluation_cache import EvaluationCache
+        print("✓ EvaluationCache imports")
+    except Exception as e:
+        print(f"✗ EvaluationCache import failed: {e}")
+        return False
+
+    try:
+        from runners.test_runner import TestRunner
+        print("✓ TestRunner imports")
+    except Exception as e:
+        print(f"✗ TestRunner import failed: {e}")
+        return False
+
+    try:
+        from runners.async_test_runner import AsyncTestRunner, run_tests_parallel
+        print("✓ AsyncTestRunner imports")
+    except Exception as e:
+        print(f"✗ AsyncTestRunner import failed: {e}")
+        return False
+
+    return True
+
+
+def test_cache():
+    """Test evaluation cache basic functionality."""
+    print("\nTesting evaluation cache...")
+
+    from judge.evaluation_cache import EvaluationCache
+    import tempfile
+    import os
+
+    # Use temp directory for testing
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache = EvaluationCache(cache_dir=tmpdir, ttl=3600)
+
+        # Test set/get
+        test_eval = {"is_vulnerable": True, "confidence": 0.9}
+        cache.set(
+            prompt_text="test prompt",
+            response_text="test response",
+            model="test-model",
+            judge_version="v1",
+            attack_version="v1",
+            evaluation=test_eval
+        )
+
+        retrieved = cache.get(
+            prompt_text="test prompt",
+            response_text="test response",
+            model="test-model",
+            judge_version="v1",
+            attack_version="v1"
+        )
+
+        if retrieved == test_eval:
+            print("✓ Cache set/get works")
+        else:
+            print(f"✗ Cache test failed: {retrieved} != {test_eval}")
+            return False
+
+        # Test stats
+        stats = cache.get_stats()
+        if stats["total_entries"] == 1:
+            print(f"✓ Cache stats work: {stats}")
+        else:
+            print(f"✗ Cache stats failed: {stats}")
+            return False
+
+    return True
+
+
+def test_rate_limiting():
+    """Test rate limiting logic (without actual API calls)."""
+    print("\nTesting rate limiting...")
+
+    from runners.test_runner import TestRunner
+
+    # Initialize with basic tier
+    runner = TestRunner(
+        api_endpoint="http://test.example.com",
+        service_tier="basic"
+    )
+
+    # Check rate limits are set
+    if runner.rate_limits["basic"]["requests_per_minute"] == 10:
+        print("✓ Rate limits configured correctly")
+    else:
+        print(f"✗ Rate limits wrong: {runner.rate_limits}")
+        return False
+
+    # Check sliding window is initialized
+    if hasattr(runner, "request_times") and hasattr(runner, "rate_limit_lock"):
+        print("✓ Rate limiting structures initialized")
+    else:
+        print("✗ Rate limiting structures missing")
+        return False
+
+    return True
+
+
+def test_web_ui_config():
+    """Test web UI configuration parsing."""
+    print("\nTesting web UI config...")
+
+    from runners.test_runner import TestRunner
+
+    web_ui_config = {
+        "input_selector": ".custom-input",
+        "submit_selector": ".custom-submit",
+        "response_selector": ".custom-response"
+    }
+
+    runner = TestRunner(
+        api_endpoint="http://test.example.com",
+        web_ui_config=web_ui_config
+    )
+
+    if runner.web_ui_config == web_ui_config:
+        print(f"✓ Web UI config stored: {web_ui_config}")
+    else:
+        print(f"✗ Web UI config failed: {runner.web_ui_config}")
+        return False
+
+    return True
+
+
+def test_async_runner():
+    """Test async runner initialization."""
+    print("\nTesting async runner...")
+
+    from runners.test_runner import TestRunner
+    from runners.async_test_runner import AsyncTestRunner
+
+    # Create base runner
+    test_runner = TestRunner(
+        api_endpoint="http://test.example.com"
+    )
+
+    # Wrap in async runner
+    async_runner = AsyncTestRunner(test_runner, max_concurrent=5)
+
+    if async_runner.max_concurrent == 5:
+        print("✓ Async runner initialized with concurrency=5")
+    else:
+        print(f"✗ Async runner concurrency wrong: {async_runner.max_concurrent}")
+        return False
+
+    # Clean up
+    async_runner.shutdown()
+    print("✓ Async runner shutdown works")
+
+    return True
+
+
+def main():
+    """Run all integration tests."""
+    print("=" * 60)
+    print("LLM Red-Team CI - Integration Test")
+    print("=" * 60)
+
+    tests = [
+        ("Imports", test_imports),
+        ("Cache", test_cache),
+        ("Rate Limiting", test_rate_limiting),
+        ("Web UI Config", test_web_ui_config),
+        ("Async Runner", test_async_runner),
+    ]
+
+    results = []
+    for name, test_func in tests:
+        try:
+            result = test_func()
+            results.append((name, result))
+        except Exception as e:
+            print(f"\n✗ {name} failed with exception: {e}")
+            import traceback
+            traceback.print_exc()
+            results.append((name, False))
+
+    # Summary
+    print("\n" + "=" * 60)
+    print("Test Summary")
+    print("=" * 60)
+
+    passed = sum(1 for _, result in results if result)
+    total = len(results)
+
+    for name, result in results:
+        status = "✓ PASS" if result else "✗ FAIL"
+        print(f"{status}: {name}")
+
+    print(f"\nTotal: {passed}/{total} passed")
+
+    if passed == total:
+        print("\n🎉 All integration tests passed!")
+        return 0
+    else:
+        print(f"\n❌ {total - passed} test(s) failed")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,85 @@
+"""
+Text-to-Speech using Piper TTS (100% local, fast, high quality)
+German voice support
+"""
+import io
+import wave
+from piper.voice import PiperVoice
+from loguru import logger
+
+class TextToSpeech:
+    def __init__(self, voice="de_DE-thorsten-high"):
+        """
+        Initialize Piper TTS with German voice
+
+        German voices:
+        - de_DE-thorsten-high (Male, high quality)
+        - de_DE-thorsten-medium (Male, medium quality, faster)
+        - de_DE-thorsten-low (Male, low quality, fastest)
+        """
+        self.voice_name = voice
+        self.sample_rate = 16000
+
+        try:
+            # Load Piper voice
+            self.voice = PiperVoice.load(voice)
+            logger.success(f"Piper TTS initialized (voice: {voice})")
+        except Exception as e:
+            logger.error(f"Failed to load Piper voice: {e}")
+            logger.info("Voice will be auto-downloaded on first use")
+            raise
+
+    def speak(self, text: str) -> bytes:
+        """Convert text to audio (returns raw PCM bytes)"""
+        try:
+            logger.debug(f"Generating speech: {text[:50]}...")
+
+            # Synthesize audio
+            audio_bytes = io.BytesIO()
+            wav_file = wave.open(audio_bytes, 'wb')
+
+            # Configure WAV file
+            self.voice.synthesize(text, wav_file)
+
+            # Get raw audio data (without WAV header)
+            audio_bytes.seek(0)
+            wav_data = audio_bytes.read()
+
+            # Strip WAV header (44 bytes) for raw PCM
+            if len(wav_data) > 44:
+                return wav_data[44:]
+            else:
+                return wav_data
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            return None
+
+    async def _generate_audio(self, text: str) -> bytes:
+        """Generate audio (compatibility method for async calls)"""
+        return self.speak(text)
+
+    def speak_stream(self, text: str):
+        """Stream audio generation (sentence by sentence)"""
+        try:
+            logger.debug(f"Streaming speech: {text[:50]}...")
+
+            # Split into sentences for streaming
+            sentences = []
+            current = ""
+            for char in text:
+                current += char
+                if char in '.!?':
+                    sentences.append(current.strip())
+                    current = ""
+            if current.strip():
+                sentences.append(current.strip())
+
+            # Generate and yield each sentence
+            for sentence in sentences:
+                audio = self.speak(sentence)
+                if audio:
+                    yield audio
+
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")

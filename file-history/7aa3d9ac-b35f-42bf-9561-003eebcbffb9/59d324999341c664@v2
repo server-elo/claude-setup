@@ -1,0 +1,131 @@
+"""
+Async Test Runner Module
+
+Parallel test execution using asyncio for improved performance.
+"""
+
+import asyncio
+import logging
+from typing import Dict, Any, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+import functools
+
+logger = logging.getLogger("llm-red-team-ci.async_test_runner")
+
+
+class AsyncTestRunner:
+    """
+    Wrapper around TestRunner to enable parallel test execution.
+    Uses asyncio with ThreadPoolExecutor for I/O-bound operations.
+    """
+
+    def __init__(self, test_runner, max_concurrent: int = 10):
+        """
+        Initialize the AsyncTestRunner.
+
+        Args:
+            test_runner: The synchronous TestRunner instance
+            max_concurrent: Maximum number of concurrent tests (default: 10)
+        """
+        self.test_runner = test_runner
+        self.max_concurrent = max_concurrent
+        self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
+        logger.info(f"AsyncTestRunner initialized with max_concurrent={max_concurrent}")
+
+    async def execute_prompt_async(self, prompt) -> Dict[str, Any]:
+        """
+        Execute a prompt asynchronously.
+
+        Args:
+            prompt: The prompt object
+
+        Returns:
+            Dict containing the response
+        """
+        loop = asyncio.get_event_loop()
+
+        # Run the synchronous execute_prompt in a thread pool
+        result = await loop.run_in_executor(
+            self.executor,
+            self.test_runner.execute_prompt,
+            prompt
+        )
+
+        return result
+
+    async def execute_prompts_parallel(
+        self,
+        prompts: List[Any],
+        progress_callback: Optional[callable] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute multiple prompts in parallel with controlled concurrency.
+
+        Args:
+            prompts: List of prompt objects
+            progress_callback: Optional callback function called after each completion
+
+        Returns:
+            List of results in the same order as prompts
+        """
+        semaphore = asyncio.Semaphore(self.max_concurrent)
+
+        async def execute_with_semaphore(prompt, index):
+            async with semaphore:
+                logger.debug(f"Executing prompt {index + 1}/{len(prompts)}")
+                result = await self.execute_prompt_async(prompt)
+
+                if progress_callback:
+                    progress_callback(index + 1, len(prompts))
+
+                return result
+
+        # Create tasks for all prompts
+        tasks = [
+            execute_with_semaphore(prompt, i)
+            for i, prompt in enumerate(prompts)
+        ]
+
+        # Execute all tasks and gather results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Convert exceptions to error dicts
+        processed_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Prompt {i} failed with exception: {result}")
+                processed_results.append({"error": str(result)})
+            else:
+                processed_results.append(result)
+
+        return processed_results
+
+    def shutdown(self):
+        """Shutdown the executor."""
+        self.executor.shutdown(wait=True)
+        logger.info("AsyncTestRunner shutdown complete")
+
+
+def run_tests_parallel(test_runner, prompts: List[Any], max_concurrent: int = 10, progress_callback: Optional[callable] = None) -> List[Dict[str, Any]]:
+    """
+    Convenience function to run tests in parallel.
+
+    Args:
+        test_runner: The TestRunner instance
+        prompts: List of prompts to execute
+        max_concurrent: Maximum concurrent executions
+        progress_callback: Optional progress callback
+
+    Returns:
+        List of results
+    """
+    async_runner = AsyncTestRunner(test_runner, max_concurrent=max_concurrent)
+
+    try:
+        # Run the async execution
+        results = asyncio.run(
+            async_runner.execute_prompts_parallel(prompts, progress_callback)
+        )
+        return results
+    finally:
+        async_runner.shutdown()

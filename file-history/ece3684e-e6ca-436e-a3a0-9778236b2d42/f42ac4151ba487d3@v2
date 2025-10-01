@@ -1,0 +1,177 @@
+"""
+TRUE LOCAL TTS - Piper (Zero Network Latency)
+Based on VoXtream paper techniques + actual local execution
+
+Target: <150ms first-packet latency (vs Edge TTS ~1200ms)
+"""
+import subprocess
+import os
+import time
+import wave
+import io
+from loguru import logger
+from typing import Generator
+
+
+class PiperTTS:
+    """
+    100% Local TTS using Piper (ONNX-based)
+
+    Key advantages vs Edge TTS:
+    - Zero network latency (instant)
+    - True VoXtream-style streaming
+    - Sub-150ms first-packet achievable
+    - German Thorsten voice (male, professional)
+    """
+
+    def __init__(self, voice_path: str = None):
+        """
+        Initialize Piper TTS
+
+        Args:
+            voice_path: Path to .onnx voice model
+        """
+        # Find piper binary
+        self.piper_dir = os.path.join(os.path.dirname(__file__), '../../piper')
+        self.piper_binary = os.path.join(self.piper_dir, 'piper')
+
+        # Find voice model
+        if voice_path is None:
+            voice_path = os.path.join(os.path.dirname(__file__), '../../voices/thorsten.onnx')
+
+        self.voice_path = voice_path
+
+        # Verify files exist
+        if not os.path.exists(self.piper_binary):
+            raise FileNotFoundError(f"Piper binary not found: {self.piper_binary}")
+
+        if not os.path.exists(self.voice_path):
+            raise FileNotFoundError(f"Voice model not found: {self.voice_path}")
+
+        # Make binary executable
+        os.chmod(self.piper_binary, 0o755)
+
+        self.sample_rate = 22050  # Piper default
+
+        logger.success(f"✅ Piper TTS initialized (100% LOCAL)")
+        logger.info(f"   Binary: {self.piper_binary}")
+        logger.info(f"   Voice: {self.voice_path}")
+        logger.info(f"   Expected: <150ms latency (zero network)")
+
+    def speak(self, text: str) -> bytes:
+        """
+        Generate speech audio (100% local, instant)
+
+        Args:
+            text: Text to synthesize
+
+        Returns:
+            bytes: Raw PCM audio data
+        """
+        start_time = time.time()
+
+        try:
+            logger.debug(f"Generating speech (LOCAL): {text[:50]}...")
+
+            # Run Piper TTS (local binary, instant)
+            process = subprocess.Popen(
+                [
+                    self.piper_binary,
+                    '--model', self.voice_path,
+                    '--output-raw'
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={**os.environ, 'LD_LIBRARY_PATH': self.piper_dir}
+            )
+
+            # Send text and get audio
+            audio_data, error = process.communicate(input=text.encode('utf-8'), timeout=5)
+
+            if process.returncode != 0:
+                logger.error(f"Piper error: {error.decode()}")
+                return b''
+
+            latency = (time.time() - start_time) * 1000
+            logger.success(f"🎯 LOCAL TTS latency: {latency:.0f}ms (target: <150ms)")
+
+            return audio_data
+
+        except subprocess.TimeoutExpired:
+            logger.error("Piper TTS timeout")
+            process.kill()
+            return b''
+        except Exception as e:
+            logger.error(f"Piper TTS error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return b''
+
+    def speak_stream_sentences(self, text: str) -> Generator[bytes, None, None]:
+        """
+        VoXtream-style streaming: Generate audio sentence-by-sentence
+
+        TRUE streaming with local TTS = each sentence in <150ms
+
+        Args:
+            text: Full text to synthesize
+
+        Yields:
+            bytes: Audio data for each sentence
+        """
+        start_time = time.time()
+        first_packet = True
+
+        try:
+            logger.debug(f"Streaming speech (LOCAL VoXtream): {text[:50]}...")
+
+            # Split into sentences (VoXtream monotonic alignment)
+            sentences = self._split_sentences(text)
+
+            for i, sentence in enumerate(sentences):
+                if not sentence.strip():
+                    continue
+
+                logger.debug(f"Generating sentence {i+1}/{len(sentences)}: {sentence[:30]}...")
+
+                # Generate audio for this sentence (LOCAL = instant)
+                audio_data = self.speak(sentence)
+
+                if audio_data:
+                    if first_packet:
+                        latency = (time.time() - start_time) * 1000
+                        logger.success(f"🎯 First-packet latency: {latency:.0f}ms (LOCAL, target: <150ms)")
+                        first_packet = False
+
+                    yield audio_data
+
+        except Exception as e:
+            logger.error(f"Piper streaming error: {e}")
+
+    def _split_sentences(self, text: str) -> list:
+        """
+        Split text into sentences for incremental processing
+
+        VoXtream monotonic alignment: left-to-right, no backtracking
+        """
+        sentences = []
+        current = ""
+
+        for char in text:
+            current += char
+            # German sentence boundaries
+            if char in '.!?' and len(current.strip()) > 3:
+                sentences.append(current.strip())
+                current = ""
+
+        # Add remaining text
+        if current.strip():
+            sentences.append(current.strip())
+
+        logger.debug(f"Split into {len(sentences)} sentences")
+        return sentences
+
+
+# Backward compatibility
+TextToSpeech = PiperTTS

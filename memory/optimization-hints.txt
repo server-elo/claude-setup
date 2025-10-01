@@ -1,0 +1,10 @@
+# Slow operations detected:
+   3 ps aux | grep python | grep sofia
+   1 Traceback (most recent call last):\
+
+# Optimization: Use 'rg' instead of 'grep', 'fd' instead of 'find'
+
+# Repeated package installs:
+   4 pip install -r requirements.txt
+   2 npm install -g @openai/codex
+   2   pip install -r requirements.txt\

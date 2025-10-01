@@ -1,0 +1,19 @@
+  21 cd
+  10 claude
+  10 brew
+   6 pip3
+   5 python3
+   5 
+   4 qwen
+   3 pip
+   3 npm
+   3 hf
+   2 uv
+   2 git
+   2 codex
+   2 clear
+   1 source
+   1 desktop
+   1 curl
+   1 claudeä
+   1 /bin/bash

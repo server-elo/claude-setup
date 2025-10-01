@@ -1,0 +1,32 @@
+[
+  {
+    "content": "Clone sofia-en repository fresh",
+    "status": "in_progress",
+    "activeForm": "Cloning sofia-en"
+  },
+  {
+    "content": "Clone local-voice-ai-agent repository fresh",
+    "status": "pending",
+    "activeForm": "Cloning local-voice-ai-agent"
+  },
+  {
+    "content": "Analyze LiveKit architecture in sofia-en",
+    "status": "pending",
+    "activeForm": "Analyzing LiveKit architecture"
+  },
+  {
+    "content": "Analyze FastRTC architecture in local-voice-ai-agent",
+    "status": "pending",
+    "activeForm": "Analyzing FastRTC architecture"
+  },
+  {
+    "content": "Design integration strategy",
+    "status": "pending",
+    "activeForm": "Designing integration"
+  },
+  {
+    "content": "Create integration plan document",
+    "status": "pending",
+    "activeForm": "Creating plan"
+  }
+]

@@ -1,0 +1,156 @@
+# Sofia Hotel Receptionist - Implementation Guide
+
+## 📁 File Structure
+
+```
+agents/hotel/
+├── sofia_hotel_receptionist.py  ✅ PRODUCTION (Pure Console - Use This!)
+├── sofia_hotel_web.py           🌐 WEB INTERFACE (Browser/Testing)
+└── hotel_agent.py                📦 ORIGINAL (Backup/Reference)
+```
+
+## 🎯 Which Version to Use?
+
+### ✅ **sofia_hotel_receptionist.py** (RECOMMENDED)
+**Use for: Hotel front desk production deployment**
+
+```bash
+/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python sofia_hotel_receptionist.py receptionist
+```
+
+**Features:**
+- ✅ Pure console mode - No browser needed
+- ✅ Direct microphone/speaker interaction
+- ✅ Perfect for kiosk/reception desk
+- ✅ Listens for 5 seconds, processes, responds
+- ✅ Say "goodbye" to end session
+- ✅ Clean terminal output
+
+**Perfect for:**
+- Hotel reception desk
+- Guest service kiosk
+- Front desk assistant
+- Self-service check-in
+
+---
+
+### 🌐 **sofia_hotel_web.py** (TESTING/MONITORING)
+**Use for: Staff monitoring or testing**
+
+```bash
+/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python sofia_hotel_web.py receptionist
+```
+
+**Features:**
+- 🌐 Opens browser interface
+- 👀 Visual conversation display
+- 🎤 Click-to-talk button
+- 📊 Real-time transcripts
+- 🖥️ Good for staff monitoring
+
+**Perfect for:**
+- Testing voice interactions
+- Staff training
+- Monitoring conversations
+- Demo presentations
+
+---
+
+### 📦 **hotel_agent.py** (ORIGINAL/BACKUP)
+**Use for: Reference only**
+
+Original LiveKit-based implementation. Keep as backup or reference.
+
+---
+
+## 🚀 Quick Start (Production)
+
+### 1. Launch Sofia Receptionist
+```bash
+cd /Users/tolga/Desktop/elvi/sofia-pers/sofia-hotel/agents/hotel
+/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python sofia_hotel_receptionist.py receptionist
+```
+
+### 2. Expected Behavior
+1. Sofia greets guest with voice
+2. System listens for 5 seconds
+3. Guest speaks hotel request
+4. Sofia processes and responds with voice
+5. Repeat until guest says "goodbye"
+
+### 3. Guest Interaction Flow
+```
+Sofia: "Guten Tag! Welcome to Hotel Lärchenhof..."
+🎤 Listening...
+Guest: "I need a room for tonight"
+🤔 Processing speech...
+👂 Guest said: I need a room for tonight
+🤔 Sofia is thinking...
+🏨 Sofia: "Of course! I'd be happy to help..."
+🔊 Sofia speaking...
+✅ Ready for next request
+```
+
+## 🎤 Voice Commands
+
+Guests can say:
+- "I need a room for tonight"
+- "What spa services do you have?"
+- "Book me a massage"
+- "Tell me about the restaurant"
+- "What's the weather like?"
+- "Goodbye" (to end session)
+
+## 🔧 Troubleshooting
+
+### No microphone detected
+```bash
+# Check microphone permissions
+# Go to System Preferences > Security & Privacy > Microphone
+# Enable for Terminal/Python
+```
+
+### No audio output
+```bash
+# Check speaker volume
+# Verify audio output device in System Preferences > Sound
+```
+
+### Sofia not responding
+```bash
+# Check Ollama is running
+ollama serve
+
+# Test voice models
+python -c "from fastrtc import get_tts_model; get_tts_model()"
+```
+
+## 📊 System Requirements
+
+- **Microphone**: Any USB or built-in mic
+- **Speakers**: Any audio output device
+- **RAM**: 8GB minimum (16GB recommended)
+- **CPU**: Multi-core recommended for real-time processing
+- **OS**: macOS (tested), Linux (should work)
+
+## 🏨 Hotel Features
+
+Sofia can handle:
+- ✅ Room bookings and availability
+- ✅ Wellness/spa appointments
+- ✅ Restaurant reservations
+- ✅ Local information and attractions
+- ✅ Emergency situations
+- ✅ Special occasions and events
+- ✅ Multi-day booking management
+
+## 🔒 Privacy & Security
+
+- **100% Local**: No cloud services
+- **Private**: All data stays on-premises
+- **Secure**: No internet connection required
+- **GDPR Compliant**: Guest data controlled locally
+
+---
+
+**For complete documentation, see:** `HOTEL_RECEPTIONIST_GUIDE.md`

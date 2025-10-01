@@ -1,0 +1,1 @@
+# Frequent workflow: cd ~/Desktop/elvi/sofia-pers/sofia-local && python agent.py console (used 2 times)

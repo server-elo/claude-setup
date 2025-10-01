@@ -1,0 +1,31 @@
+"""
+Text-to-Speech using Kokoro (100% local, free)
+"""
+from fastrtc import get_tts_model
+from loguru import logger
+
+class TextToSpeech:
+    def __init__(self, voice="af_sarah"):  # Female voice
+        logger.info(f"Loading Kokoro TTS model (voice: {voice})...")
+        self.model = get_tts_model()  # kokoro
+        self.voice = voice
+        logger.success("TTS model loaded")
+
+    def speak(self, text: str):
+        """Convert text to audio (returns complete audio)"""
+        try:
+            logger.debug(f"Generating speech: {text}")
+            audio = self.model.tts(text, voice=self.voice)
+            return audio
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            return None
+
+    def speak_stream(self, text: str):
+        """Stream audio generation (realtime)"""
+        try:
+            logger.debug(f"Streaming speech: {text}")
+            for audio_chunk in self.model.stream_tts_sync(text, voice=self.voice):
+                yield audio_chunk
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")

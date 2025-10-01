@@ -1,0 +1,432 @@
+"""
+PREMem: Pre-Storage Reasoning for Episodic Memory
+Based on arXiv:2509.10852 (September 2025)
+
+Key Innovation:
+- Shifts complex reasoning from inference to memory construction
+- Pre-extracts entities, facts, intents, summaries AT STORAGE TIME
+- Fast retrieval without re-reasoning every query
+- Structured memory with indexed searchable facts
+
+Author: Implemented from arXiv research for Sofia Voice AI
+"""
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+import time
+import json
+from pathlib import Path
+from loguru import logger
+
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except ImportError:
+    logger.warning("spacy not installed. PREMem will use fallback mode.")
+    SPACY_AVAILABLE = False
+
+
+@dataclass
+class ProcessedMemory:
+    """Pre-processed memory unit with extracted intelligence"""
+    # Raw content
+    raw_user: str
+    raw_assistant: str
+
+    # Pre-extracted intelligence (done once at storage time)
+    entities: List[str] = field(default_factory=list)
+    intent: str = ""
+    facts: List[str] = field(default_factory=list)
+    summary: str = ""
+    keywords: List[str] = field(default_factory=list)
+
+    # Metadata
+    timestamp: float = field(default_factory=time.time)
+    session_id: int = 0
+    turn_id: int = 0
+
+    # Indexing flags
+    indexed: bool = True  # Already processed!
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'raw_user': self.raw_user,
+            'raw_assistant': self.raw_assistant,
+            'entities': self.entities,
+            'intent': self.intent,
+            'facts': self.facts,
+            'summary': self.summary,
+            'keywords': self.keywords,
+            'timestamp': self.timestamp,
+            'session_id': self.session_id,
+            'turn_id': self.turn_id,
+            'indexed': self.indexed
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'ProcessedMemory':
+        """Create from dictionary"""
+        return cls(**data)
+
+
+class PreStorageReasoning:
+    """
+    Pre-Storage Reasoning Memory System
+
+    Philosophy: Reason ONCE during storage, not every retrieval
+
+    Traditional approach:
+        Store raw text → Reason during retrieval (SLOW, repeated work)
+
+    PREMem approach:
+        Reason during storage → Fast indexed retrieval (FAST, one-time work)
+
+    Extracted intelligence:
+    - Entities: People, places, times, organizations
+    - Intent: What the user wants (schedule, query, cancel, etc.)
+    - Facts: Structured key-value facts
+    - Summary: One-sentence summary of exchange
+    - Keywords: Important terms for search
+    """
+
+    def __init__(
+        self,
+        spacy_model: str = "de_core_news_sm",
+        cache_dir: Optional[Path] = None
+    ):
+        """
+        Initialize Pre-Storage Reasoning system
+
+        Args:
+            spacy_model: Spacy model for German NLP
+            cache_dir: Directory to save processed memories
+        """
+        self.cache_dir = cache_dir or Path.home() / ".claude" / "memory" / "premem"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Session tracking
+        self.session_id = 0
+        self.turn_id = 0
+
+        # Memory storage
+        self.memories: List[ProcessedMemory] = []
+
+        # NLP pipeline
+        if SPACY_AVAILABLE:
+            try:
+                logger.info(f"Loading spaCy model: {spacy_model}...")
+                self.nlp = spacy.load(spacy_model)
+                logger.success("✅ PREMem initialized with German NLP")
+            except OSError:
+                logger.error(f"spaCy model '{spacy_model}' not found.")
+                logger.info(f"Install with: python -m spacy download {spacy_model}")
+                self.nlp = None
+        else:
+            self.nlp = None
+            logger.warning("⚠️  PREMem running in fallback mode (no NLP)")
+
+        # Load existing memories
+        self._load_memories()
+
+    def store_exchange(
+        self,
+        user_msg: str,
+        assistant_msg: str,
+        timestamp: Optional[float] = None
+    ) -> ProcessedMemory:
+        """
+        Store exchange with PRE-REASONING
+
+        All intelligence extraction happens HERE, not during retrieval
+
+        Args:
+            user_msg: User's message
+            assistant_msg: Assistant's response
+            timestamp: Unix timestamp
+
+        Returns:
+            ProcessedMemory with all extracted intelligence
+        """
+        if timestamp is None:
+            timestamp = time.time()
+
+        # Create processed memory
+        memory = ProcessedMemory(
+            raw_user=user_msg,
+            raw_assistant=assistant_msg,
+            timestamp=timestamp,
+            session_id=self.session_id,
+            turn_id=self.turn_id
+        )
+
+        # Extract intelligence (ONCE, now)
+        if self.nlp:
+            combined_text = user_msg + " " + assistant_msg
+
+            # 1. Extract entities
+            memory.entities = self._extract_entities(combined_text)
+
+            # 2. Classify intent
+            memory.intent = self._classify_intent(user_msg)
+
+            # 3. Extract facts
+            memory.facts = self._extract_facts(user_msg, assistant_msg)
+
+            # 4. Generate summary
+            memory.summary = self._generate_summary(user_msg, assistant_msg)
+
+            # 5. Extract keywords
+            memory.keywords = self._extract_keywords(combined_text)
+        else:
+            # Fallback: simple keyword extraction
+            memory.keywords = self._simple_keywords(user_msg + " " + assistant_msg)
+            memory.summary = user_msg[:50] + "..."
+
+        # Store in memory list
+        self.memories.append(memory)
+        self.turn_id += 1
+
+        logger.debug(f"Stored memory with pre-reasoning: Turn {self.turn_id}")
+        logger.debug(f"  Entities: {memory.entities}")
+        logger.debug(f"  Intent: {memory.intent}")
+        logger.debug(f"  Facts: {len(memory.facts)}")
+
+        return memory
+
+    def _extract_entities(self, text: str) -> List[str]:
+        """Extract named entities (people, places, times, orgs)"""
+        if not self.nlp:
+            return []
+
+        doc = self.nlp(text)
+        entities = []
+
+        for ent in doc.ents:
+            # Include: PER (person), LOC (location), ORG (organization), TIME, DATE
+            if ent.label_ in ['PER', 'LOC', 'ORG', 'TIME', 'DATE', 'MISC']:
+                entities.append(f"{ent.text} ({ent.label_})")
+
+        return list(set(entities))  # Remove duplicates
+
+    def _classify_intent(self, user_msg: str) -> str:
+        """Classify user intent"""
+        user_lower = user_msg.lower()
+
+        # Simple rule-based intent classification (can be replaced with ML)
+        if any(word in user_lower for word in ['termin', 'buchung', 'reservierung', 'appointment']):
+            return "schedule_appointment"
+        elif any(word in user_lower for word in ['stornieren', 'absagen', 'cancel']):
+            return "cancel_appointment"
+        elif any(word in user_lower for word in ['wann', 'when', 'zeit', 'time', 'uhrzeit']):
+            return "query_time"
+        elif any(word in user_lower for word in ['wo', 'where', 'adresse', 'address']):
+            return "query_location"
+        elif any(word in user_lower for word in ['kosten', 'preis', 'cost', 'price']):
+            return "query_price"
+        elif any(word in user_lower for word in ['hallo', 'hi', 'guten tag', 'hello']):
+            return "greeting"
+        elif any(word in user_lower for word in ['danke', 'thanks', 'vielen dank']):
+            return "thanks"
+        elif any(word in user_lower for word in ['tschüss', 'auf wiedersehen', 'goodbye', 'bye']):
+            return "goodbye"
+        else:
+            return "general_query"
+
+    def _extract_facts(self, user_msg: str, assistant_msg: str) -> List[str]:
+        """Extract structured facts from exchange"""
+        facts = []
+
+        # Extract from assistant response (usually contains factual info)
+        if self.nlp:
+            doc = self.nlp(assistant_msg)
+
+            # Look for time expressions
+            for ent in doc.ents:
+                if ent.label_ in ['TIME', 'DATE']:
+                    facts.append(f"Mentioned time: {ent.text}")
+
+            # Look for numbers (prices, durations, etc.)
+            for token in doc:
+                if token.like_num:
+                    facts.append(f"Number mentioned: {token.text}")
+
+        return facts
+
+    def _generate_summary(self, user_msg: str, assistant_msg: str) -> str:
+        """Generate one-sentence summary"""
+        # Simple summary: first sentence of assistant response
+        sentences = assistant_msg.split('.')
+        if sentences:
+            summary = sentences[0].strip() + "."
+            return summary[:100]  # Max 100 chars
+        return user_msg[:50] + "..."
+
+    def _extract_keywords(self, text: str) -> List[str]:
+        """Extract important keywords"""
+        if not self.nlp:
+            return self._simple_keywords(text)
+
+        doc = self.nlp(text)
+        keywords = []
+
+        # Extract nouns and verbs (content words)
+        for token in doc:
+            if token.pos_ in ['NOUN', 'VERB', 'PROPN'] and not token.is_stop:
+                keywords.append(token.lemma_.lower())
+
+        return list(set(keywords))[:10]  # Top 10 unique keywords
+
+    @staticmethod
+    def _simple_keywords(text: str) -> List[str]:
+        """Fallback simple keyword extraction"""
+        # Remove common stopwords
+        stopwords = {'der', 'die', 'das', 'ein', 'eine', 'ist', 'und', 'oder', 'aber', 'mit',
+                     'the', 'a', 'an', 'is', 'are', 'and', 'or', 'but', 'with'}
+
+        words = text.lower().split()
+        keywords = [w.strip('.,!?') for w in words if w.lower() not in stopwords and len(w) > 3]
+        return list(set(keywords))[:10]
+
+    def retrieve_by_query(self, query: str, k: int = 5) -> List[ProcessedMemory]:
+        """
+        Fast retrieval using pre-indexed facts and entities
+
+        No heavy reasoning needed - everything was pre-extracted!
+
+        Args:
+            query: Search query
+            k: Number of memories to retrieve
+
+        Returns:
+            List of ProcessedMemory objects ranked by relevance
+        """
+        query_lower = query.lower()
+
+        # Extract query keywords
+        if self.nlp:
+            query_keywords = set(self._extract_keywords(query))
+        else:
+            query_keywords = set(self._simple_keywords(query))
+
+        # Score memories
+        scores = []
+        for memory in self.memories:
+            score = 0.0
+
+            # Match keywords (FAST - pre-extracted!)
+            memory_keywords = set(memory.keywords)
+            keyword_overlap = len(query_keywords & memory_keywords)
+            score += keyword_overlap * 2.0
+
+            # Match entities (FAST - pre-extracted!)
+            for entity in memory.entities:
+                if any(kw in entity.lower() for kw in query_keywords):
+                    score += 3.0  # Higher weight for entity match
+
+            # Match intent
+            query_intent = self._classify_intent(query)
+            if query_intent == memory.intent:
+                score += 1.0
+
+            # Recency boost
+            recency_boost = 1.0 / (1.0 + (self.turn_id - memory.turn_id) * 0.1)
+            score *= recency_boost
+
+            scores.append((memory, score))
+
+        # Sort by score and return top k
+        top_memories = sorted(scores, key=lambda x: x[1], reverse=True)[:k]
+
+        logger.debug(f"Retrieved {len(top_memories)} memories for query")
+        return [mem for mem, score in top_memories if score > 0]
+
+    def retrieve_by_entity(self, entity: str, k: int = 5) -> List[ProcessedMemory]:
+        """Fast retrieval by entity (pre-indexed!)"""
+        entity_lower = entity.lower()
+
+        matching_memories = []
+        for memory in self.memories:
+            for mem_entity in memory.entities:
+                if entity_lower in mem_entity.lower():
+                    matching_memories.append(memory)
+                    break
+
+        # Sort by recency
+        matching_memories.sort(key=lambda m: m.turn_id, reverse=True)
+        return matching_memories[:k]
+
+    def retrieve_by_intent(self, intent: str, k: int = 5) -> List[ProcessedMemory]:
+        """Fast retrieval by intent (pre-indexed!)"""
+        matching_memories = [m for m in self.memories if m.intent == intent]
+        matching_memories.sort(key=lambda m: m.turn_id, reverse=True)
+        return matching_memories[:k]
+
+    def new_session(self):
+        """Start a new conversation session"""
+        self.session_id += 1
+        self.turn_id = 0
+        logger.info(f"Started new session: {self.session_id}")
+
+    def save_memories(self, filename: Optional[str] = None):
+        """Save processed memories to disk"""
+        if filename is None:
+            filename = f"premem_session_{self.session_id}.json"
+
+        filepath = self.cache_dir / filename
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump({
+                'session_id': self.session_id,
+                'turn_id': self.turn_id,
+                'memories': [m.to_dict() for m in self.memories]
+            }, f, ensure_ascii=False, indent=2)
+
+        logger.success(f"✅ Saved {len(self.memories)} processed memories to {filepath}")
+
+    def _load_memories(self):
+        """Load most recent processed memories from disk"""
+        memory_files = list(self.cache_dir.glob("premem_session_*.json"))
+
+        if not memory_files:
+            logger.info("No existing memories found, starting fresh")
+            return
+
+        # Load most recent
+        latest = max(memory_files, key=lambda p: p.stat().st_mtime)
+
+        try:
+            with open(latest, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            self.session_id = data['session_id']
+            self.turn_id = data['turn_id']
+            self.memories = [ProcessedMemory.from_dict(m) for m in data['memories']]
+
+            logger.success(f"✅ Loaded {len(self.memories)} processed memories from {latest}")
+            logger.info(f"   Session: {self.session_id}, Turn: {self.turn_id}")
+        except Exception as e:
+            logger.error(f"Failed to load memories: {e}")
+
+    def get_stats(self) -> Dict:
+        """Get memory statistics"""
+        total_entities = sum(len(m.entities) for m in self.memories)
+        total_facts = sum(len(m.facts) for m in self.memories)
+        intents = [m.intent for m in self.memories]
+        intent_counts = {intent: intents.count(intent) for intent in set(intents)}
+
+        return {
+            'total_memories': len(self.memories),
+            'total_entities': total_entities,
+            'total_facts': total_facts,
+            'sessions': self.session_id + 1,
+            'turns': self.turn_id,
+            'intent_distribution': intent_counts
+        }
+
+    def clear(self):
+        """Clear all memories (use with caution!)"""
+        self.memories.clear()
+        self.session_id = 0
+        self.turn_id = 0
+        logger.warning("⚠️  Cleared all memories")

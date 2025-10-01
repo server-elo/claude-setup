@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""
+Test M3 Voice Cloning with Receptionist Voice
+"""
+from src.voice.tts_encodec_m3 import TextToSpeech
+import soundfile as sf
+from loguru import logger
+
+def test_voice_cloning():
+    """Test voice cloning with receptionist sample"""
+
+    logger.info("="*60)
+    logger.info("M3 VOICE CLONING TEST")
+    logger.info("="*60)
+
+    # Load M3 TTS
+    logger.info("\nLoading M3 Encodec TTS...")
+    tts = TextToSpeech()
+
+    # Reference voice
+    reference_voice = "receptionist_voice_katja.wav"
+    logger.info(f"\nReference voice: {reference_voice}")
+
+    # Test phrases
+    test_phrases = [
+        "Guten Tag, wie kann ich Ihnen helfen?",
+        "Haben Sie bereits reserviert?",
+        "Ihr Zimmer ist bereit. Hier ist Ihr Schlüssel.",
+    ]
+
+    logger.info("\n" + "="*60)
+    logger.info("CLONING TESTS")
+    logger.info("="*60)
+
+    for i, phrase in enumerate(test_phrases, 1):
+        logger.info(f"\n📝 Test {i}: '{phrase}'")
+
+        try:
+            # Clone voice
+            audio = tts.synthesize_with_voice(phrase, reference_voice)
+
+            # Save result
+            output_file = f"voice_clone_test_{i}.wav"
+
+            # Convert bytes to audio
+            import numpy as np
+            audio_np = np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0
+            sf.write(output_file, audio_np, 16000)
+
+            logger.success(f"   ✅ Generated: {output_file}")
+            logger.info(f"   Size: {len(audio)} bytes")
+
+        except Exception as e:
+            logger.error(f"   ❌ Failed: {e}")
+
+    logger.info("\n" + "="*60)
+    logger.info("RESULTS")
+    logger.info("="*60)
+    logger.info("\nGenerated files:")
+    logger.info("  - voice_clone_test_1.wav")
+    logger.info("  - voice_clone_test_2.wav")
+    logger.info("  - voice_clone_test_3.wav")
+    logger.info("\nReference voice:")
+    logger.info(f"  - {reference_voice}")
+    logger.info("\n💡 Listen and compare!")
+
+if __name__ == "__main__":
+    test_voice_cloning()

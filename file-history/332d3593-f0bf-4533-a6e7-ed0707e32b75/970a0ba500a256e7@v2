@@ -1,0 +1,69 @@
+#!/bin/bash
+# MOSHI-INSPIRED SOFIA QUICK TEST
+# Tests the optimized German voice pipeline
+
+echo "🚀 MOSHI-INSPIRED SOFIA - Quick Test"
+echo "===================================="
+echo ""
+
+# Activate venv
+source .venv/bin/activate
+
+# Check voice model
+if [ ! -f ~/.local/share/piper-voices/de_DE-thorsten-medium.onnx ]; then
+    echo "❌ Voice model not found!"
+    echo "Run: python -m piper.download_voices -l de_DE -n thorsten-medium"
+    exit 1
+fi
+
+echo "✅ Voice model found (60MB)"
+echo ""
+
+# Test Piper directly
+echo "🎤 Testing Piper TTS..."
+echo "Guten Tag, ich bin Sofia, Ihre virtuelle Rezeptionistin" | \
+    piper --model ~/.local/share/piper-voices/de_DE-thorsten-medium.onnx \
+          --output-raw > /dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "✅ Piper TTS working"
+else
+    echo "❌ Piper TTS failed"
+    exit 1
+fi
+
+echo ""
+
+# Check Ollama
+echo "🤖 Checking Ollama..."
+if ! ollama list &>/dev/null; then
+    echo "❌ Ollama not running!"
+    echo "Run: ollama serve"
+    exit 1
+fi
+
+echo "✅ Ollama running"
+echo ""
+
+# Check model
+if ollama list | grep -q "gemma2:2b"; then
+    echo "✅ gemma2:2b found"
+elif ollama list | grep -q "gemma"; then
+    echo "✅ Gemma model found (will use it)"
+else
+    echo "⚠️  No Gemma model, will use first available"
+fi
+
+echo ""
+echo "🎯 ALL CHECKS PASSED!"
+echo ""
+echo "Run Sofia:"
+echo "  python agent.py console"
+echo ""
+echo "Performance Targets:"
+echo "  - STT (faster-whisper): <500ms"
+echo "  - LLM (Ollama): <200ms"
+echo "  - TTS (Piper): <150ms"
+echo "  - TOTAL: <1000ms (vs ~2600ms before)"
+echo ""
+echo "Say 'Auf Wiedersehen' to exit"

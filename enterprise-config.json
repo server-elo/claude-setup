@@ -1,0 +1,96 @@
+{
+  "enterprise_features": {
+    "usage_analytics": {
+      "enabled": true,
+      "metrics": [
+        "lines_of_code_accepted",
+        "suggestion_accept_rate",
+        "agent_utilization",
+        "security_issues_detected",
+        "performance_improvements",
+        "test_coverage_increases"
+      ],
+      "reporting_interval": "daily",
+      "export_format": ["json", "csv", "prometheus"]
+    },
+
+    "policy_management": {
+      "tool_permissions": {
+        "bash_commands": {
+          "allowed": true,
+          "restricted_commands": ["rm -rf", "sudo", "curl | sh"],
+          "require_confirmation": ["git push", "npm publish", "docker push"]
+        },
+        "file_access": {
+          "allowed_paths": ["./", "../", "~/.claude/"],
+          "restricted_paths": ["/etc/", "/var/", "~/.ssh/"],
+          "backup_before_edit": true
+        },
+        "mcp_servers": {
+          "auto_approve": ["filesystem", "github"],
+          "require_approval": ["sentry", "atlassian"],
+          "blocked": []
+        }
+      },
+
+      "security_policies": {
+        "secret_scanning": {
+          "enabled": true,
+          "patterns": ["api_key", "password", "token", "secret"],
+          "action": "block_and_alert"
+        },
+        "compliance_mode": {
+          "enabled": false,
+          "standards": ["SOC2", "GDPR", "HIPAA"],
+          "audit_logging": true
+        }
+      }
+    },
+
+    "team_collaboration": {
+      "shared_configurations": {
+        "claude_md_templates": true,
+        "custom_commands": true,
+        "subagent_definitions": true,
+        "hooks_and_automation": false
+      },
+      "workspace_sync": {
+        "enabled": false,
+        "sync_scope": ["commands", "agents"],
+        "exclude": ["hooks", "personal_settings"]
+      }
+    }
+  },
+
+  "advanced_configuration": {
+    "model_routing": {
+      "strategy": "adaptive",
+      "complexity_thresholds": {
+        "haiku": 0.3,
+        "sonnet": 0.7,
+        "opus": 0.9
+      },
+      "task_specific_models": {
+        "code_review": "sonnet",
+        "architecture_design": "opus",
+        "quick_fixes": "haiku",
+        "security_analysis": "opus",
+        "documentation": "sonnet"
+      }
+    },
+
+    "context_optimization": {
+      "smart_truncation": true,
+      "priority_preservation": ["claude_md", "recent_changes", "error_context"],
+      "background_indexing": true,
+      "semantic_search": true
+    },
+
+    "performance_tuning": {
+      "parallel_subagents": 3,
+      "cache_responses": true,
+      "preload_common_patterns": true,
+      "optimize_for_latency": true
+    }
+  }
+}

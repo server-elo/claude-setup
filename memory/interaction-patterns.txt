@@ -1,0 +1,43 @@
+   5 continue
+   3 run it
+   3 hey claude
+   3 /login 
+   1 you are working to the Update(src/voice/console_handler_simple.py)
+   1 yes
+   1 what is happening
+   1 what do you think
+   1 what can we do to make she like mimi
+   1 use your max power..dive deeper in every from 5 things you gave to me ..implement everything and the test it..use all you need
+   1 try to do this  2. Voila (May 2025) - arxiv.org/abs/2505.02707
+   1 the irc one take a check with max power
+   1 tes it
+   1 search on arxiv how to make my red team project better
+   1 run it i want to speak tto
+   1 max power do this
+   1 make it like a human and like he made it in the beggening
+   1 make it 
+   1 MAKE A NEW FILE ..OPTION C THAN B
+   1 kill background and run it again
+   1 is the same like mimi
+   1 is the same like memo mimo how it was called
+   1 is same thing what you wanted to do
+   1 is not happening nothing
+   1 implement everythung in max power
+   1 iam not liking it delete it
+   1 how to make it for the m3 apple
+   1 how to login
+   1 find a woman voice
+   1 everything open sourse
+   1 dont search like this.. se what it does and make 3 different searches
+   1 doesnt have a memory..kill first the background
+   1 do you think all 4 are good ?
+   1 did you tried
+   1 did you test it
+   1 crete something i can try now ..but that is good
+   1 can you search in arxiv what can you do to do it better..search on german too or i dont know...search 3 or 4 different key word
+   1 but you search them with different keywords in arxiv first
+   1 a friend of mine has a github and want to check some project ... i want him to help..username tndreka
+   1 [Pasted text #1 +55 lines][Pasted text #2 +55 lines]
+   1   - Voice role-play capabilities (perfect for hotel receptionist!)
+   1   - End-to-end architecture
+   1   - 195ms response latency - benchmark for sofia-local

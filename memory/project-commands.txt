@@ -1,0 +1,22 @@
+   8 cd desktop
+   4 cd sofia1
+   2 python3 agent.py console
+   2 cd sofia
+   2 cd outline
+   1 uv run python indextts/infer_v2.py
+   1 python3 sofia_enhanced_working.py console
+   1 python3 -m venv hf_env\
+   1 pip install npm
+   1 npm install npm install -g @anthropic-ai/claude-code
+   1 npm install -g @qwen-code/qwen-code@latest\
+   1 npm
+   1 git lfs install
+   1 git clone https://github.com/server-elo/quantum-elo
+   1 cd whisper
+   1 cd sofia 1
+   1 cd quantum 
+   1 cd out line
+   1 cd elo-deu
+   1 brew install npm
+   1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\
+   1  python3 dental_receptionist_final.py

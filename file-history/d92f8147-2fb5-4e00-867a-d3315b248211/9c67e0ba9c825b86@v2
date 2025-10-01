@@ -1,0 +1,423 @@
+"""
+MITRE ATT&CK Framework Attack Tree Implementation
+Based on: Guided Reasoning in LLM-Driven Penetration Testing (arXiv:2509.07939)
+Achieves 71.8%-78.6% task completion vs 13.5%-16.5% for self-guided
+"""
+
+from typing import List, Dict, Optional, Set
+from dataclasses import dataclass, field
+from enum import Enum
+import json
+
+
+class TacticType(Enum):
+    """MITRE ATT&CK Tactics (high-level objectives)."""
+    RECONNAISSANCE = "reconnaissance"
+    RESOURCE_DEVELOPMENT = "resource_development"
+    INITIAL_ACCESS = "initial_access"
+    EXECUTION = "execution"
+    PERSISTENCE = "persistence"
+    PRIVILEGE_ESCALATION = "privilege_escalation"
+    DEFENSE_EVASION = "defense_evasion"
+    CREDENTIAL_ACCESS = "credential_access"
+    DISCOVERY = "discovery"
+    LATERAL_MOVEMENT = "lateral_movement"
+    COLLECTION = "collection"
+    COMMAND_AND_CONTROL = "command_and_control"
+    EXFILTRATION = "exfiltration"
+    IMPACT = "impact"
+
+
+@dataclass
+class TTP:
+    """Tactics, Techniques, and Procedures."""
+    id: str  # e.g., T1566 (Phishing)
+    name: str
+    tactic: TacticType
+    description: str
+    platforms: List[str] = field(default_factory=list)
+    data_sources: List[str] = field(default_factory=list)
+    mitigations: List[str] = field(default_factory=list)
+    prerequisites: List[str] = field(default_factory=list)
+    detection_methods: List[str] = field(default_factory=list)
+
+
+@dataclass
+class AttackNode:
+    """Node in the deterministic attack tree."""
+    ttp: TTP
+    children: List['AttackNode'] = field(default_factory=list)
+    parent: Optional['AttackNode'] = None
+    success_criteria: List[str] = field(default_factory=list)
+    failure_indicators: List[str] = field(default_factory=list)
+    estimated_difficulty: float = 0.5  # 0-1 scale
+    completed: bool = False
+
+
+class AttackTree:
+    """
+    Deterministic attack tree built from MITRE ATT&CK Matrix.
+    Constrains LLM reasoning to proven penetration testing methodologies.
+    """
+
+    def __init__(self):
+        self.root: Optional[AttackNode] = None
+        self.ttp_library: Dict[str, TTP] = {}
+        self.current_node: Optional[AttackNode] = None
+        self._build_ttp_library()
+
+    def _build_ttp_library(self):
+        """Build comprehensive TTP library from MITRE ATT&CK."""
+
+        # Reconnaissance TTPs
+        self.ttp_library["T1595"] = TTP(
+            id="T1595",
+            name="Active Scanning",
+            tactic=TacticType.RECONNAISSANCE,
+            description="Scan victim infrastructure for vulnerabilities",
+            platforms=["Linux", "macOS", "Windows", "Network"],
+            data_sources=["Network Traffic", "Packet Capture"],
+            prerequisites=["Target identification"],
+            detection_methods=["Network IDS", "Firewall logs"]
+        )
+
+        self.ttp_library["T1592"] = TTP(
+            id="T1592",
+            name="Gather Victim Host Information",
+            tactic=TacticType.RECONNAISSANCE,
+            description="Gather information about victim systems",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Internet Scan"],
+            prerequisites=[],
+            detection_methods=["External monitoring"]
+        )
+
+        # Initial Access TTPs
+        self.ttp_library["T1566"] = TTP(
+            id="T1566",
+            name="Phishing",
+            tactic=TacticType.INITIAL_ACCESS,
+            description="Send phishing messages to gain access",
+            platforms=["Linux", "macOS", "Windows", "SaaS", "Office 365"],
+            data_sources=["Email Gateway", "Network Traffic"],
+            prerequisites=["Target email addresses"],
+            detection_methods=["Email filtering", "User training"]
+        )
+
+        self.ttp_library["T1190"] = TTP(
+            id="T1190",
+            name="Exploit Public-Facing Application",
+            tactic=TacticType.INITIAL_ACCESS,
+            description="Exploit vulnerabilities in public applications",
+            platforms=["Linux", "Windows", "Network"],
+            data_sources=["Application Logs", "Web Logs"],
+            prerequisites=["Vulnerability identification"],
+            detection_methods=["WAF", "IDS/IPS", "Log analysis"]
+        )
+
+        # Execution TTPs
+        self.ttp_library["T1059"] = TTP(
+            id="T1059",
+            name="Command and Scripting Interpreter",
+            tactic=TacticType.EXECUTION,
+            description="Execute commands via interpreters",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Process Monitoring", "Command History"],
+            prerequisites=["Code execution capability"],
+            detection_methods=["EDR", "Process monitoring", "Command logging"]
+        )
+
+        # Persistence TTPs
+        self.ttp_library["T1053"] = TTP(
+            id="T1053",
+            name="Scheduled Task/Job",
+            tactic=TacticType.PERSISTENCE,
+            description="Schedule tasks for persistence",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Scheduled Task Logs", "Process Monitoring"],
+            prerequisites=["Initial access"],
+            detection_methods=["Scheduled task monitoring"]
+        )
+
+        self.ttp_library["T1547"] = TTP(
+            id="T1547",
+            name="Boot or Logon Autostart Execution",
+            tactic=TacticType.PERSISTENCE,
+            description="Configure autostart mechanisms",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Registry", "File Monitoring"],
+            prerequisites=["Write access to system"],
+            detection_methods=["Startup item monitoring"]
+        )
+
+        # Privilege Escalation TTPs
+        self.ttp_library["T1068"] = TTP(
+            id="T1068",
+            name="Exploitation for Privilege Escalation",
+            tactic=TacticType.PRIVILEGE_ESCALATION,
+            description="Exploit vulnerabilities to escalate privileges",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Process Monitoring", "System Calls"],
+            prerequisites=["Initial access", "Vulnerability"],
+            detection_methods=["Anomaly detection", "System call monitoring"]
+        )
+
+        # Defense Evasion TTPs
+        self.ttp_library["T1070"] = TTP(
+            id="T1070",
+            name="Indicator Removal",
+            tactic=TacticType.DEFENSE_EVASION,
+            description="Delete or modify artifacts",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["File Monitoring", "Event Logs"],
+            prerequisites=["Access to system"],
+            detection_methods=["File integrity monitoring", "Log correlation"]
+        )
+
+        self.ttp_library["T1027"] = TTP(
+            id="T1027",
+            name="Obfuscated Files or Information",
+            tactic=TacticType.DEFENSE_EVASION,
+            description="Obfuscate malicious code",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["File Monitoring", "Process Monitoring"],
+            prerequisites=[],
+            detection_methods=["Static analysis", "Behavioral analysis"]
+        )
+
+        # Credential Access TTPs
+        self.ttp_library["T1110"] = TTP(
+            id="T1110",
+            name="Brute Force",
+            tactic=TacticType.CREDENTIAL_ACCESS,
+            description="Attempt to guess credentials",
+            platforms=["Linux", "macOS", "Windows", "Azure AD", "Office 365"],
+            data_sources=["Authentication Logs"],
+            prerequisites=["Target account names"],
+            detection_methods=["Failed login monitoring", "Account lockout"]
+        )
+
+        self.ttp_library["T1555"] = TTP(
+            id="T1555",
+            name="Credentials from Password Stores",
+            tactic=TacticType.CREDENTIAL_ACCESS,
+            description="Extract credentials from password stores",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["File Access", "Process Monitoring"],
+            prerequisites=["Access to system"],
+            detection_methods=["File access monitoring"]
+        )
+
+        # Discovery TTPs
+        self.ttp_library["T1082"] = TTP(
+            id="T1082",
+            name="System Information Discovery",
+            tactic=TacticType.DISCOVERY,
+            description="Gather system information",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Process Monitoring", "Command Execution"],
+            prerequisites=["Code execution"],
+            detection_methods=["Command monitoring", "Process analysis"]
+        )
+
+        self.ttp_library["T1087"] = TTP(
+            id="T1087",
+            name="Account Discovery",
+            tactic=TacticType.DISCOVERY,
+            description="Enumerate accounts",
+            platforms=["Linux", "macOS", "Windows", "Azure AD", "Office 365"],
+            data_sources=["Process Monitoring", "API Calls"],
+            prerequisites=["Code execution"],
+            detection_methods=["API monitoring", "Query analysis"]
+        )
+
+        # Collection TTPs
+        self.ttp_library["T1005"] = TTP(
+            id="T1005",
+            name="Data from Local System",
+            tactic=TacticType.COLLECTION,
+            description="Collect data from local system",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["File Monitoring", "Process Monitoring"],
+            prerequisites=["Access to system"],
+            detection_methods=["File access monitoring", "Data loss prevention"]
+        )
+
+        # Exfiltration TTPs
+        self.ttp_library["T1041"] = TTP(
+            id="T1041",
+            name="Exfiltration Over C2 Channel",
+            tactic=TacticType.EXFILTRATION,
+            description="Exfiltrate data over C2 channel",
+            platforms=["Linux", "macOS", "Windows"],
+            data_sources=["Network Traffic", "Packet Capture"],
+            prerequisites=["C2 channel", "Collected data"],
+            detection_methods=["Network monitoring", "DLP"]
+        )
+
+    def build_attack_path(
+        self,
+        objective: str,
+        target_platform: str = "Linux"
+    ) -> AttackNode:
+        """
+        Build deterministic attack path for given objective.
+
+        Args:
+            objective: High-level attack objective
+            target_platform: Target platform
+
+        Returns:
+            Root node of attack tree
+        """
+        # Start with reconnaissance
+        recon_ttp = self.ttp_library["T1595"]
+        root = AttackNode(
+            ttp=recon_ttp,
+            success_criteria=["Target vulnerabilities identified"],
+            failure_indicators=["No response from target", "Blocked by firewall"]
+        )
+
+        # Add initial access
+        initial_access = AttackNode(
+            ttp=self.ttp_library["T1190"],
+            parent=root,
+            success_criteria=["Remote code execution achieved"],
+            failure_indicators=["WAF blocked", "No vulnerabilities found"]
+        )
+        root.children.append(initial_access)
+
+        # Add execution
+        execution = AttackNode(
+            ttp=self.ttp_library["T1059"],
+            parent=initial_access,
+            success_criteria=["Command interpreter access"],
+            failure_indicators=["Restricted shell", "No interpreter available"]
+        )
+        initial_access.children.append(execution)
+
+        # Add privilege escalation
+        privesc = AttackNode(
+            ttp=self.ttp_library["T1068"],
+            parent=execution,
+            success_criteria=["Root/admin privileges obtained"],
+            failure_indicators=["No exploitable vulnerabilities"]
+        )
+        execution.children.append(privesc)
+
+        # Add persistence
+        persistence = AttackNode(
+            ttp=self.ttp_library["T1053"],
+            parent=privesc,
+            success_criteria=["Backdoor installed"],
+            failure_indicators=["Task scheduler locked"]
+        )
+        privesc.children.append(persistence)
+
+        # Add discovery
+        discovery = AttackNode(
+            ttp=self.ttp_library["T1082"],
+            parent=persistence,
+            success_criteria=["System enumerated"],
+            failure_indicators=["Monitoring detected"]
+        )
+        persistence.children.append(discovery)
+
+        # Add collection
+        collection = AttackNode(
+            ttp=self.ttp_library["T1005"],
+            parent=discovery,
+            success_criteria=["Sensitive data collected"],
+            failure_indicators=["No valuable data found"]
+        )
+        discovery.children.append(collection)
+
+        # Add exfiltration
+        exfil = AttackNode(
+            ttp=self.ttp_library["T1041"],
+            parent=collection,
+            success_criteria=["Data exfiltrated successfully"],
+            failure_indicators=["DLP blocked", "Network monitoring detected"]
+        )
+        collection.children.append(exfil)
+
+        self.root = root
+        self.current_node = root
+
+        return root
+
+    def get_next_steps(self, current_node: Optional[AttackNode] = None) -> List[AttackNode]:
+        """Get valid next steps from current position in attack tree."""
+        if current_node is None:
+            current_node = self.current_node
+
+        if current_node is None:
+            return []
+
+        return current_node.children
+
+    def validate_action(self, action: str, node: AttackNode) -> bool:
+        """
+        Validate if action matches TTP constraints.
+
+        Args:
+            action: Proposed action by LLM
+            node: Current node in attack tree
+
+        Returns:
+            True if action is valid for this TTP
+        """
+        ttp = node.ttp
+
+        # Check prerequisites
+        if ttp.prerequisites:
+            # In production, verify prerequisites are met
+            pass
+
+        # Check if action aligns with technique description
+        action_lower = action.lower()
+        ttp_keywords = ttp.name.lower().split()
+
+        matches = sum(1 for keyword in ttp_keywords if keyword in action_lower)
+
+        return matches > 0
+
+    def mark_completed(self, node: AttackNode):
+        """Mark node as completed and advance in tree."""
+        node.completed = True
+        if node.children:
+            self.current_node = node.children[0]
+        else:
+            self.current_node = None
+
+    def get_attack_path_summary(self) -> List[str]:
+        """Get summary of complete attack path."""
+        if self.root is None:
+            return []
+
+        path = []
+        self._traverse_tree(self.root, path)
+        return path
+
+    def _traverse_tree(self, node: AttackNode, path: List[str]):
+        """Recursively traverse tree to build path."""
+        path.append(f"{node.ttp.id}: {node.ttp.name} ({node.ttp.tactic.value})")
+
+        for child in node.children:
+            self._traverse_tree(child, path)
+
+    def save_tree(self, filepath: str):
+        """Save attack tree to JSON."""
+        def node_to_dict(node: AttackNode) -> Dict:
+            return {
+                "ttp_id": node.ttp.id,
+                "ttp_name": node.ttp.name,
+                "tactic": node.ttp.tactic.value,
+                "completed": node.completed,
+                "children": [node_to_dict(child) for child in node.children]
+            }
+
+        tree_data = node_to_dict(self.root) if self.root else {}
+
+        with open(filepath, 'w') as f:
+            json.dump(tree_data, f, indent=2)

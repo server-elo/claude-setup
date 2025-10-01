@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Debug AudioChunk structure"""
+from src.voice.tts_piper_local import PiperLocalTTS
+
+tts = PiperLocalTTS(voice_model="de_DE-thorsten-medium")
+
+for chunk in tts.voice.synthesize("Test"):
+    print(f"Type: {type(chunk)}")
+    print(f"Dir: {dir(chunk)}")
+    print(f"Repr: {repr(chunk)}")
+    if hasattr(chunk, '__dict__'):
+        print(f"Dict: {chunk.__dict__}")
+    break

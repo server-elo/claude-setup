@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""
+LLM Red-Team CI - Main Entry Point
+
+This script is the entry point for the LLM Red-Team CI GitHub Action.
+It orchestrates the testing process, including:
+- Loading and validating inputs
+- Setting up the test environment
+- Running adversarial prompts against the target LLM application
+- Evaluating responses using the judge model
+- Generating reports and notifications
+"""
+
+import os
+import sys
+import json
+import logging
+import argparse
+from datetime import datetime, timezone
+from pathlib import Path
+import yaml
+from tqdm import tqdm
+
+# Add the parent directory to the path so we can import our modules
+sys.path.append(str(Path(__file__).parent.parent))
+
+from runners.test_runner import TestRunner
+from runners.async_test_runner import run_tests_parallel
+from judge.evaluator import ResponseEvaluator
+from corpus.prompt_manager import PromptManager
+from notification.slack_notifier import SlackNotifier
+from reports.report_generator import ReportGenerator
+from database.results_store import ResultsStore
+
+# Configure logging
+log_level_str = os.environ.get("LOG_LEVEL", "INFO")
+log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+
+# Check if we should use structured JSON logging
+use_json_logging = os.environ.get("LOG_FORMAT", "text").lower() == "json"
+
+if use_json_logging:
+    import json
+    import sys
+    
+    class JsonFormatter(logging.Formatter):
+        def format(self, record):
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+            if hasattr(record, 'module'):
+                log_entry["module"] = record.module
+            if hasattr(record, 'funcName'):
+                log_entry["function"] = record.funcName
+            if hasattr(record, 'lineno'):
+                log_entry["line"] = record.lineno
+            return json.dumps(log_entry)
+    
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter())
+    
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    root_logger.handlers = [handler]
+else:
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+logger = logging.getLogger("llm-red-team-ci")
+
+
+def load_config_from_yaml(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def get_config_value(config: dict, env_key: str, yaml_path: str, default=None):
+    """Get configuration value from environment variable or YAML config."""
+    # First try environment variable
+    env_value = os.environ.get(env_key)
+    if env_value:
+        return env_value
+    
+    # Then try YAML config path (e.g., "target.endpoint" -> config["target"]["endpoint"])
+    keys = yaml_path.split('.')
+    value = config
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return default
+    return value if value is not None else default
+
+def main():
+    """Main entry point for the GitHub Action."""
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="LLM Red-Team CI - Security testing for LLM applications")
+    parser.add_argument("--config", type=str, default=".llm-redteam.yml", 
+                       help="Path to configuration file")
+    parser.add_argument("--out", type=str, default="artifacts",
+                       help="Output directory for reports and verdicts")
+    args = parser.parse_args()
+    
+    logger.info(f"Starting LLM Red-Team CI with config: {args.config}, output: {args.out}")
+    
+    # Create output directory
+    output_dir = Path(args.out)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load configuration from YAML file
+    config = {}
+    if Path(args.config).exists():
+        config = load_config_from_yaml(args.config)
+        # Expand env vars in common fields
+        try:
+            if isinstance(config.get("target", {}).get("endpoint"), str):
+                config["target"]["endpoint"] = os.path.expandvars(config["target"]["endpoint"])
+        except Exception:
+            pass
+    
+    # Get inputs - prioritize environment variables, then config file, then defaults
+    api_endpoint = get_config_value(config, "INPUT_API_ENDPOINT", "target.endpoint")
+    api_key = get_config_value(config, "INPUT_API_KEY", "target.api_key")
+    test_categories_str = get_config_value(config, "INPUT_TEST_CATEGORIES", "suites", "all")
+    test_intensity = get_config_value(config, "INPUT_TEST_INTENSITY", "limits.test_intensity", "medium")
+    slack_webhook = get_config_value(config, "INPUT_SLACK_WEBHOOK", "notifications.slack_webhook")
+    report_format_str = get_config_value(config, "INPUT_REPORT_FORMAT", "report.outputs", "all")
+    service_tier = get_config_value(config, "INPUT_SERVICE_TIER", "limits.service_tier", "standard")
+    
+    # Process test categories (from suites config if available, otherwise from legacy input)
+    # Determine categories from suites (mapped to canonical internal names)
+    # Canonical names: prompt-injection, data-exfiltration, jailbreak, tool-abuse
+    mode_map = {
+        # Canonical names (pass through)
+        "prompt-injection": "prompt-injection",
+        "data-exfiltration": "data-exfiltration",
+        "jailbreak": "jailbreak",
+        "tool-abuse": "tool-abuse",
+        # Legacy aliases for backward compatibility
+        "injection": "prompt-injection",
+        "exfil": "data-exfiltration",
+        "data_exfiltration": "data-exfiltration",
+        "tool_misuse": "tool-abuse",
+        # Note: safety_bypass removed - use prompt-injection directly
+    }
+    test_categories = None
+    if isinstance(config.get("suites"), list) and config["suites"]:
+        mapped = []
+        for suite in config["suites"]:
+            if not isinstance(suite, dict):
+                continue
+            mode = str(suite.get("mode", "")).strip().lower()
+            if not mode:
+                continue
+            cat = mode_map.get(mode)
+            if cat:
+                mapped.append(cat)
+            else:
+                logger.warning(f"Unknown test mode '{mode}' in suite configuration. Valid modes: {list(mode_map.keys())}")
+                # Continue processing other suites rather than failing
+        test_categories = list(dict.fromkeys(mapped)) or None
+    elif isinstance(test_categories_str, str) and test_categories_str != "all":
+        test_categories = [c.strip() for c in test_categories_str.split(',') if c.strip()]
+    else:
+        test_categories = None
+    
+    # Process report formats (handle list or string)
+    if isinstance(report_format_str, list):
+        report_formats = [str(x).strip() for x in report_format_str if str(x).strip()]
+    elif isinstance(report_format_str, str):
+        report_formats = [s.strip() for s in report_format_str.split(',')] if report_format_str != "all" else ["sarif", "json", "html"]
+    else:
+        report_formats = ["sarif", "json", "html"]
+
+    # Derive intensity from suites tiers if not explicitly set in env/config
+    explicit_intensity = bool(os.environ.get("INPUT_TEST_INTENSITY") or (config.get("limits", {}) or {}).get("test_intensity"))
+    if not explicit_intensity:
+        tiers_rank = {"easy": 0, "medium": 1, "hard": 2}
+        best = -1
+        for s in config.get("suites", []) or []:
+            if isinstance(s, dict):
+                for t in s.get("tiers", []) or []:
+                    best = max(best, tiers_rank.get(str(t).lower(), -1))
+        test_intensity = {0: "low", 1: "medium", 2: "high"}.get(best, "medium")
+    
+    # Check for required api_endpoint
+    if not api_endpoint:
+        logger.error("API endpoint must be provided either in config file or INPUT_API_ENDPOINT environment variable")
+        sys.exit(1)
+    
+    # Log configuration (excluding sensitive data)
+    logger.info(f"API Endpoint: {api_endpoint}")
+    logger.info(f"Test Categories: {test_categories}")
+    logger.info(f"Test Intensity: {test_intensity}")
+    logger.info(f"Report Format: {report_formats}")
+    logger.info(f"Service Tier: {service_tier}")
+    logger.info(f"Output Directory: {args.out}")
+    
+    # Initialize components
+    try:
+        # Set up the prompt manager to load and generate adversarial prompts
+        prompt_manager = PromptManager(
+            categories=test_categories,
+            intensity=test_intensity
+        )
+
+        # Extract web_ui_config from YAML if present
+        web_ui_config = None
+        if config.get("target", {}).get("web_ui", {}).get("enabled"):
+            web_ui_config = config["target"]["web_ui"]
+            logger.info(f"Web UI testing enabled with selectors: "
+                       f"input={web_ui_config.get('input_selector', 'default')}, "
+                       f"submit={web_ui_config.get('submit_selector', 'default')}")
+
+        # Set up the test runner to execute prompts against the target API
+        test_runner = TestRunner(
+            api_endpoint=api_endpoint,
+            api_key=api_key,
+            service_tier=service_tier,
+            web_ui_config=web_ui_config
+        )
+
+        # Set up the response evaluator (judge model) with caching
+        cache_enabled = config.get("advanced", {}).get("enable_cache", True)
+        evaluator = ResponseEvaluator(enable_cache=cache_enabled)
+
+        # Set up the results store for saving test results
+        results_store = ResultsStore()
+
+        # Set up the report generator with output directory
+        report_generator = ReportGenerator(
+            formats=report_formats,
+            output_dir=args.out
+        )
+
+        # Set up the Slack notifier if webhook is provided
+        slack_notifier = SlackNotifier(webhook_url=slack_webhook) if slack_webhook else None
+
+        # Log cache stats if caching is enabled
+        if cache_enabled and hasattr(evaluator, 'cache') and evaluator.cache:
+            cache_stats = evaluator.cache.get_stats()
+            logger.info(f"Evaluation cache: {cache_stats['active_entries']} active entries, "
+                       f"{cache_stats['expired_entries']} expired, "
+                       f"{cache_stats['total_size_mb']:.2f}MB")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize components: {e}")
+        sys.exit(1)
+    
+    # Run the tests
+    try:
+        logger.info("Loading adversarial prompts")
+        prompts = prompt_manager.get_prompts()
+        logger.info(f"Loaded {len(prompts)} prompts")
+
+        # Track test results
+        results = []
+        failures = []
+
+        # Determine if we should use parallel execution
+        max_concurrency = config.get("limits", {}).get("max_concurrency", 4)
+        use_parallel = max_concurrency > 1 and len(prompts) > 3
+
+        if use_parallel:
+            logger.info(f"Executing {len(prompts)} tests in parallel (max_concurrency={max_concurrency})")
+
+            # Progress tracking for parallel execution
+            pbar = tqdm(total=len(prompts), desc="Running tests", unit="test")
+
+            def progress_callback(completed, total):
+                pbar.update(1)
+
+            # Execute tests in parallel
+            try:
+                responses = run_tests_parallel(
+                    test_runner,
+                    prompts,
+                    max_concurrent=max_concurrency,
+                    progress_callback=progress_callback
+                )
+            finally:
+                pbar.close()
+
+            # Evaluate responses with progress bar
+            logger.info("Evaluating responses")
+            for i, (prompt, response) in enumerate(tqdm(zip(prompts, responses), total=len(prompts), desc="Evaluating", unit="test")):
+                try:
+                    evaluation = evaluator.evaluate(prompt, response)
+
+                    # Store the result
+                    result = {
+                        "prompt": prompt.to_dict(),
+                        "response": response,
+                        "evaluation": evaluation,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    results.append(result)
+
+                    # Track failures
+                    if evaluation["is_vulnerable"]:
+                        failures.append(result)
+                        logger.warning(f"Vulnerability detected: {evaluation['vulnerability_type']}")
+                except Exception as e:
+                    logger.error(f"Error evaluating test {i+1}: {e}")
+                    # Continue with other tests
+                    results.append({
+                        "prompt": prompt.to_dict(),
+                        "response": response,
+                        "evaluation": {"error": str(e)},
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+        else:
+            # Sequential execution with progress bar
+            logger.info(f"Executing {len(prompts)} tests sequentially")
+
+            for prompt in tqdm(prompts, desc="Running tests", unit="test"):
+                try:
+                    # Execute the prompt against the target API
+                    response = test_runner.execute_prompt(prompt)
+
+                    # Evaluate the response using the judge model
+                    evaluation = evaluator.evaluate(prompt, response)
+
+                    # Store the result
+                    result = {
+                        "prompt": prompt.to_dict(),
+                        "response": response,
+                        "evaluation": evaluation,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    results.append(result)
+
+                    # Track failures
+                    if evaluation["is_vulnerable"]:
+                        failures.append(result)
+                        logger.warning(f"Vulnerability detected: {evaluation['vulnerability_type']}")
+                except Exception as e:
+                    logger.error(f"Error executing test: {e}")
+                    # Continue with other tests
+                    results.append({
+                        "prompt": prompt.to_dict(),
+                        "response": {"error": str(e)},
+                        "evaluation": {"error": str(e)},
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+        
+        # Save results to database
+        logger.info("Saving results to database")
+        results_id = results_store.save_results(results, output_dir=str(output_dir))
+
+        # Generate reports
+        logger.info("Generating reports")
+        reports = report_generator.generate(results, results_id)
+
+        # Create stable CI filenames in output directory
+        try:
+            from pathlib import Path as _P
+            # SARIF
+            sarif_path_str = reports.get("sarif", "")
+            if sarif_path_str and sarif_path_str != "":
+                sarif_path = _P(sarif_path_str)
+                if sarif_path.exists() and sarif_path.is_file():
+                    (output_dir / "report.sarif").write_text(sarif_path.read_text())
+
+            # JSON
+            json_path_str = reports.get("json", "")
+            if json_path_str and json_path_str != "":
+                json_path = _P(json_path_str)
+                if json_path.exists() and json_path.is_file():
+                    (output_dir / "report.json").write_text(json_path.read_text())
+
+            # HTML
+            html_path_str = reports.get("html", "")
+            if html_path_str and html_path_str != "":
+                html_path = _P(html_path_str)
+                if html_path.exists() and html_path.is_file():
+                    (output_dir / "report.html").write_text(html_path.read_text())
+        except Exception as e:
+            logger.warning(f"Could not create stable report files: {e}")
+
+        # verdicts.json is written by ResultsStore (if using local storage path)
+        
+        # Send notification if webhook is provided
+        if slack_notifier:
+            logger.info("Sending Slack notification")
+            slack_notifier.send_notification(
+                total_tests=len(results),
+                failures=len(failures),
+                report_url=reports.get("html_url", "")
+            )
+        
+        # Output summary
+        print(f"\n{'=' * 80}")
+        print(f"LLM Red-Team CI Summary")
+        print(f"{'=' * 80}")
+        print(f"Total tests: {len(results)}")
+        print(f"Vulnerabilities detected: {len(failures)}")
+        
+        # List failures
+        if failures:
+            print("\nVulnerabilities:")
+            for i, failure in enumerate(failures):
+                eval_data = failure["evaluation"]
+                print(f"{i+1}. {eval_data['vulnerability_type']}: {eval_data['description']}")
+            
+            # Set GitHub Action to fail if vulnerabilities were found
+            print("\n::error::LLM security vulnerabilities detected!")
+            sys.exit(1)
+        else:
+            print("\nNo vulnerabilities detected!")
+        
+    except Exception as e:
+        logger.error(f"Error during test execution: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

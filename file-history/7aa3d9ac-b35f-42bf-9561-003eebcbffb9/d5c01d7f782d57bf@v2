@@ -1,0 +1,160 @@
+{
+  "$schema": "https://claude.ai/schemas/settings.json",
+
+  "model": {
+    "default": "claude-sonnet-4-5",
+    "options": {
+      "temperature": 0.7,
+      "maxTokens": 8096,
+      "topP": 0.9
+    }
+  },
+
+  "performance": {
+    "parallelToolCalls": true,
+    "maxConcurrentTools": 5,
+    "enableStreaming": true,
+    "cacheEnabled": true,
+    "cacheTTL": 3600
+  },
+
+  "hooks": {
+    "enabled": true,
+    "preToolUse": "~/.claude/hooks/pre-tool-use.sh",
+    "postToolUse": "~/.claude/hooks/post-tool-use.sh",
+    "onStop": "~/.claude/hooks/stop.sh",
+    "notification": "~/.claude/hooks/notification.sh",
+    "timeout": 30000
+  },
+
+  "mcp": {
+    "servers": {
+      "github": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/server-github"],
+        "enabled": true,
+        "priority": "high"
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/server-filesystem"],
+        "enabled": true,
+        "priority": "high"
+      },
+      "puppeteer": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/server-puppeteer"],
+        "enabled": true,
+        "priority": "medium"
+      }
+    },
+    "autoReconnect": true,
+    "reconnectDelay": 5000,
+    "healthCheckInterval": 60000
+  },
+
+  "commands": {
+    "directory": "~/.claude/commands",
+    "enabled": true,
+    "autoload": true
+  },
+
+  "agents": {
+    "directory": "~/.claude/agents",
+    "enabled": true,
+    "maxConcurrent": 3,
+    "timeout": 300000
+  },
+
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "directory": "~/.claude/logs",
+    "maxFileSize": "10MB",
+    "maxFiles": 30,
+    "console": false
+  },
+
+  "backup": {
+    "enabled": true,
+    "directory": "~/.claude/backups",
+    "retentionDays": 7,
+    "autoBackup": true
+  },
+
+  "security": {
+    "scanForSecrets": true,
+    "preventDangerousCommands": true,
+    "requireConfirmation": ["rm -rf", "sudo", "curl | sh"],
+    "autoGitAdd": true
+  },
+
+  "ui": {
+    "theme": "auto",
+    "showProgress": true,
+    "verbose": false,
+    "notifications": true,
+    "soundEnabled": false
+  },
+
+  "git": {
+    "autoStage": true,
+    "commitMessageTemplate": "{{type}}: {{description}}\n\n🤖 Generated with Claude Code",
+    "requireHooksPass": true
+  },
+
+  "memory": {
+    "enabled": true,
+    "maxSize": "100MB",
+    "persistPath": "~/.claude/memory",
+    "ttl": 86400
+  },
+
+  "shortcuts": {
+    "quickCommit": "git add . && git commit -m",
+    "quickPush": "git add . && git commit -m 'Quick update' && git push",
+    "testRun": "npm test",
+    "buildRun": "npm run build"
+  },
+
+  "fileWatcher": {
+    "enabled": false,
+    "patterns": ["**/*.{js,ts,jsx,tsx,py,go}"],
+    "ignored": ["node_modules/**", "dist/**", "build/**", ".git/**"]
+  },
+
+  "formatting": {
+    "autoFormat": true,
+    "formatters": {
+      "javascript": "prettier",
+      "typescript": "prettier",
+      "python": "black",
+      "go": "gofmt",
+      "json": "prettier",
+      "yaml": "prettier"
+    }
+  },
+
+  "linting": {
+    "autoLint": true,
+    "linters": {
+      "javascript": "eslint",
+      "typescript": "eslint",
+      "python": "flake8",
+      "go": "golint"
+    }
+  },
+
+  "ai": {
+    "codeCompletion": true,
+    "contextWindow": 200000,
+    "smartSuggestions": true,
+    "learnFromFeedback": true
+  },
+
+  "experimental": {
+    "vectorSearch": false,
+    "semanticCache": true,
+    "predictiveEditing": false
+  }
+}

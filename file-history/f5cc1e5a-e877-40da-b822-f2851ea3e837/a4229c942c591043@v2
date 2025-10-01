@@ -1,0 +1,26 @@
+"""
+Speech-to-Text using Moonshine (100% local, free)
+"""
+from fastrtc import get_stt_model
+from loguru import logger
+
+class SpeechToText:
+    def __init__(self):
+        logger.info("Loading Moonshine STT model...")
+        self.model = get_stt_model()  # moonshine/base
+        logger.success("STT model loaded")
+
+    def transcribe(self, audio_data) -> str:
+        """Convert audio to text"""
+        try:
+            transcript = self.model.stt(audio_data)
+            logger.debug(f"Transcribed: {transcript}")
+            return transcript
+        except Exception as e:
+            logger.error(f"STT error: {e}")
+            return ""
+
+    def transcribe_stream(self, audio_stream):
+        """Stream transcription (for real-time)"""
+        for audio_chunk in audio_stream:
+            yield self.transcribe(audio_chunk)

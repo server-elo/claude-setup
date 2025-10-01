@@ -1,0 +1,22 @@
+[
+  {
+    "content": "Create simple fallback voice system",
+    "status": "completed",
+    "activeForm": "Creating simple fallback voice system"
+  },
+  {
+    "content": "Create multi-sample voice recording system",
+    "status": "in_progress",
+    "activeForm": "Creating multi-sample voice recording system"
+  },
+  {
+    "content": "Improve voice cloning with more samples",
+    "status": "pending",
+    "activeForm": "Improving voice cloning with more samples"
+  },
+  {
+    "content": "Test enhanced voice cloning",
+    "status": "pending",
+    "activeForm": "Testing enhanced voice cloning"
+  }
+]

@@ -1,0 +1,61 @@
+# GuardrailProxy Configuration
+# Copy this file to .env and configure your settings
+
+# ===================================
+# Required Configuration
+# ===================================
+
+# LLM Provider API Key (REQUIRED)
+# Get from: https://console.anthropic.com/ or https://platform.openai.com/api-keys
+PROVIDER_API_KEY=sk-ant-demo-testing-key
+
+# LLM Provider (REQUIRED)
+# Options: anthropic, openai
+PROVIDER=anthropic
+
+# Admin API Key for policy management (REQUIRED)
+# Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Or leave empty to auto-generate on startup (check logs)
+ADMIN_API_KEY=test-admin-key-12345
+
+# ===================================
+# Optional Configuration
+# ===================================
+
+# Grafana Admin Password
+GRAFANA_PASSWORD=admin
+
+# Application Version
+APP_VERSION=0.1.0
+
+# Policy File Path
+POLICY_PATH=app/policy.yaml
+
+# Provider API URL (override if using custom endpoint)
+# PROVIDER_API_URL=https://api.anthropic.com/v1/messages
+
+# Request Timeout (seconds)
+MAX_SECONDS=45
+
+# ===================================
+# Rate Limiting
+# ===================================
+
+# Requests per time period
+RATE_LIMIT=100
+
+# Time period in seconds (default: 60 = 1 minute)
+RATE_LIMIT_PERIOD=60
+
+# Additional burst capacity beyond base rate
+RATE_LIMIT_BURST=20
+
+# ===================================
+# Shadow Judge (Experimental)
+# ===================================
+
+# Enable shadow judge for policy improvements
+JUDGE_ENABLED=false
+
+# Sampling rate for shadow judge (0.05 = 5%)
+JUDGE_SAMPLE_RATE=0.05

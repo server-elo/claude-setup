@@ -1,0 +1,4 @@
+projects/
+*.jsonl
+memory/interactions.jsonl
+daemon.pid

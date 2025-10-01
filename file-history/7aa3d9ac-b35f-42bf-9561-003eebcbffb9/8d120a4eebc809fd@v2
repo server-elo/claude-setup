@@ -1,0 +1,75 @@
+---
+name: Feature Request
+about: Suggest an idea for this project
+title: '[FEATURE] '
+labels: enhancement
+assignees: ''
+---
+
+## Problem Statement
+
+<!-- Is your feature request related to a problem? Please describe. -->
+<!-- Example: "I'm always frustrated when..." -->
+
+## Proposed Solution
+
+<!-- Describe the solution you'd like -->
+<!-- Be as specific as possible about what you want to happen -->
+
+## Alternatives Considered
+
+<!-- Describe any alternative solutions or features you've considered -->
+
+## Use Case
+
+<!-- Describe how you would use this feature -->
+<!-- Include concrete examples if possible -->
+
+### Example Usage
+
+```python
+# Show how you envision using this feature
+```
+
+or
+
+```yaml
+# Show configuration changes you envision
+```
+
+## Benefits
+
+<!-- What are the benefits of implementing this feature? -->
+
+- [ ] Improves performance
+- [ ] Reduces costs
+- [ ] Improves developer experience
+- [ ] Adds new capabilities
+- [ ] Improves security
+- [ ] Other: ___
+
+## Priority
+
+<!-- How important is this feature to you? -->
+
+- [ ] Critical - blocking my use of the tool
+- [ ] High - significantly impacts my workflow
+- [ ] Medium - would be nice to have
+- [ ] Low - minor improvement
+
+## Willing to Contribute
+
+<!-- Are you willing to work on this feature? -->
+
+- [ ] Yes, I can submit a PR for this
+- [ ] Yes, but I need guidance
+- [ ] No, but I can help test it
+- [ ] No, but I can provide feedback
+
+## Additional Context
+
+<!-- Add any other context, screenshots, mockups, or examples about the feature request here -->
+
+## Related Issues
+
+<!-- Link to related issues or discussions -->

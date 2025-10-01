@@ -1,0 +1,135 @@
+#!/bin/bash
+# Continuous Learning Daemon - Runs in background, learns from your patterns
+
+DAEMON_PID="$HOME/.claude/daemon.pid"
+MEMORY_DIR="$HOME/.claude/memory"
+LOG="$HOME/.claude/logs/learning-daemon.log"
+INTERVAL=3600 # 1 hour
+
+mkdir -p "$MEMORY_DIR" "$(dirname "$LOG")"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
+}
+
+# Check if daemon already running
+if [ -f "$DAEMON_PID" ] && kill -0 $(cat "$DAEMON_PID") 2>/dev/null; then
+    log "⚠️  Daemon already running (PID: $(cat "$DAEMON_PID"))"
+    exit 0
+fi
+
+# Save PID
+echo $$ > "$DAEMON_PID"
+log "🚀 Learning daemon started (PID: $$)"
+
+# Cleanup on exit
+trap "rm -f $DAEMON_PID; log '🛑 Daemon stopped'" EXIT INT TERM
+
+# Main learning loop
+while true; do
+    log "🧠 Learning cycle started..."
+
+    # 1. Analyze command patterns
+    analyze_commands() {
+        log "  📊 Analyzing command patterns..."
+
+        # Get most used commands (last 1000)
+        tail -1000 ~/.zsh_history | \
+            sed 's/.*;//' | \
+            awk '{print $1}' | \
+            sort | uniq -c | sort -rn | head -20 \
+            > "$MEMORY_DIR/top-commands.txt"
+
+        # Detect project-specific patterns
+        tail -1000 ~/.zsh_history | \
+            grep -E "(cd |python|npm|git)" | \
+            sed 's/.*;//' | \
+            sort | uniq -c | sort -rn \
+            > "$MEMORY_DIR/project-commands.txt"
+    }
+
+    # 2. Update project memories
+    update_project_memories() {
+        log "  📂 Updating project memories..."
+
+        # Find recently modified projects
+        find ~/Desktop -maxdepth 2 -type d -mtime -1 2>/dev/null | while read project; do
+            project_name=$(basename "$project")
+            memory_file="$MEMORY_DIR/projects/$project_name.json"
+
+            # Skip if not a real project
+            [ -f "$project/package.json" ] || \
+            [ -f "$project/requirements.txt" ] || \
+            [ -f "$project/go.mod" ] || continue
+
+            mkdir -p "$MEMORY_DIR/projects"
+
+            # Update last accessed time
+            cat > "$memory_file" <<EOF
+{
+  "name": "$project_name",
+  "path": "$project",
+  "last_accessed": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "file_count": $(find "$project" -type f | wc -l),
+  "recent_files": $(find "$project" -type f -mtime -1 | head -5 | jq -R . | jq -s .)
+}
+EOF
+        done
+    }
+
+    # 3. Learn from Claude history
+    learn_from_history() {
+        log "  📖 Learning from session history..."
+
+        if [ -f ~/.claude/history.jsonl ]; then
+            # Extract patterns from last 50 interactions
+            tail -50 ~/.claude/history.jsonl | \
+                jq -r '.display' 2>/dev/null | \
+                grep -v "^$" | \
+                sort | uniq -c | sort -rn \
+                > "$MEMORY_DIR/interaction-patterns.txt" 2>/dev/null || true
+        fi
+    }
+
+    # 4. Detect repetitive tasks → suggest shortcuts
+    suggest_shortcuts() {
+        log "  💡 Detecting repetitive patterns..."
+
+        # Commands used 5+ times should be shortcuts
+        awk '$1 >= 5 {print $0}' "$MEMORY_DIR/top-commands.txt" 2>/dev/null | \
+            while read count cmd; do
+                # Check if shortcut already exists
+                if ! grep -q "alias.*$cmd" ~/.zshrc 2>/dev/null; then
+                    echo "# Suggest: alias for '$cmd' (used $count times)" >> "$MEMORY_DIR/shortcut-suggestions.txt"
+                fi
+            done
+    }
+
+    # 5. Update knowledge base metrics
+    update_metrics() {
+        log "  📈 Updating metrics..."
+
+        # Count sessions, patterns, etc
+        session_count=$(wc -l < ~/.claude/history.jsonl 2>/dev/null || echo 0)
+        pattern_count=$(wc -l < "$MEMORY_DIR/interaction-patterns.txt" 2>/dev/null || echo 0)
+
+        # Update knowledge base
+        if [ -f "$MEMORY_DIR/knowledge-base.json" ]; then
+            jq ".metrics.total_sessions = $session_count | .metrics.patterns_detected = $pattern_count | .last_learning_cycle = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"" \
+                "$MEMORY_DIR/knowledge-base.json" > "$MEMORY_DIR/knowledge-base.json.tmp" 2>/dev/null && \
+                mv "$MEMORY_DIR/knowledge-base.json.tmp" "$MEMORY_DIR/knowledge-base.json"
+        fi
+    }
+
+    # Execute learning functions
+    analyze_commands
+    update_project_memories
+    learn_from_history
+    suggest_shortcuts
+    update_metrics
+
+    log "✅ Learning cycle complete"
+    log "⏳ Next cycle in $((INTERVAL/60)) minutes..."
+
+    sleep $INTERVAL
+done

@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+Test Encodec tokenizer with Voila test audio
+Demonstrate: Audio → Tokens → Audio roundtrip + latency
+"""
+import time
+import torch
+import torchaudio
+import soundfile as sf
+from transformers import EncodecModel, AutoProcessor
+
+def test_encodec_roundtrip(audio_path="examples/test1.mp3"):
+    print("=" * 60)
+    print("ENCODEC TOKENIZER TEST (Voila Architecture)")
+    print("=" * 60)
+
+    # Load model
+    print("\n📥 Loading Encodec model...")
+    start = time.time()
+    model = EncodecModel.from_pretrained("facebook/encodec_24khz")
+    processor = AutoProcessor.from_pretrained("facebook/encodec_24khz")
+    load_time = (time.time() - start) * 1000
+    print(f"   ✅ Model loaded in {load_time:.0f}ms")
+
+    # Load audio
+    print(f"\n📂 Loading audio: {audio_path}")
+    wav, sr = torchaudio.load(audio_path)
+    if len(wav.shape) > 1:
+        wav = wav[0]  # Take first channel
+    duration_sec = len(wav) / sr
+    print(f"   Duration: {duration_sec:.2f}s, Sample rate: {sr}Hz")
+
+    # Resample if needed
+    if sr != processor.sampling_rate:
+        print(f"   Resampling {sr}Hz → {processor.sampling_rate}Hz")
+        wav = torchaudio.functional.resample(wav, sr, processor.sampling_rate)
+        sr = processor.sampling_rate
+
+    # Prepare for encoding
+    wav_input = wav[None, None, :]  # [1, 1, samples]
+
+    # ENCODE: Audio → Tokens
+    print(f"\n🔹 ENCODING: Audio → Tokens")
+    start = time.time()
+    with torch.no_grad():
+        encoder_outputs = model.encode(wav_input, bandwidth=1.5)
+        audio_codes = encoder_outputs.audio_codes[0, 0]  # [num_codebooks, seq_len]
+    encode_time = (time.time() - start) * 1000
+
+    num_codebooks, seq_len = audio_codes.shape
+    compression_ratio = len(wav) / seq_len
+    tokens_per_sec = seq_len / duration_sec
+
+    print(f"   Audio samples: {len(wav):,}")
+    print(f"   Token sequence: {seq_len:,} tokens")
+    print(f"   Codebooks: {num_codebooks}")
+    print(f"   Compression: {compression_ratio:.1f}:1")
+    print(f"   Tokens/sec: {tokens_per_sec:.1f}")
+    print(f"   ⏱️  Encoding latency: {encode_time:.1f}ms")
+
+    # DECODE: Tokens → Audio
+    print(f"\n🔹 DECODING: Tokens → Audio")
+    start = time.time()
+    with torch.no_grad():
+        audio_values = model.decode(audio_codes[None, None, :, :], [None])[0]
+        reconstructed_wav = audio_values[0, 0].cpu().numpy()
+    decode_time = (time.time() - start) * 1000
+
+    print(f"   Reconstructed: {len(reconstructed_wav):,} samples")
+    print(f"   ⏱️  Decoding latency: {decode_time:.1f}ms")
+
+    # Save reconstructed audio
+    output_path = "output/encodec_reconstructed.wav"
+    sf.write(output_path, reconstructed_wav, sr)
+    print(f"   💾 Saved to: {output_path}")
+
+    # Total roundtrip
+    total_time = encode_time + decode_time
+    print(f"\n" + "=" * 60)
+    print(f"📊 TOTAL ROUNDTRIP LATENCY: {total_time:.1f}ms")
+    print(f"=" * 60)
+
+    # Compare to Sofia baseline
+    print(f"\n📈 COMPARISON TO SOFIA BASELINE:")
+    print(f"   Sofia STT (Whisper):  2000ms")
+    print(f"   Encodec encoding:       {encode_time:.0f}ms  ({2000/encode_time:.1f}x faster)")
+    print(f"")
+    print(f"   Sofia TTS (Edge):      1200ms")
+    print(f"   Encodec decoding:       {decode_time:.0f}ms  ({1200/decode_time:.1f}x faster)")
+    print(f"")
+    print(f"   Total potential speedup: {3200/total_time:.1f}x")
+
+    print(f"\n✅ Test complete!")
+    print(f"   Listen to: {output_path}")
+    print(f"   Original:  {audio_path}")
+
+if __name__ == "__main__":
+    test_encodec_roundtrip()

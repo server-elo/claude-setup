@@ -1,0 +1,126 @@
+"""Base LLM interface supporting open-source models."""
+
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+import requests
+import json
+
+
+class BaseLLM(ABC):
+    """Abstract base class for LLM providers."""
+
+    @abstractmethod
+    async def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text from prompt."""
+        pass
+
+    @abstractmethod
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Chat completion."""
+        pass
+
+
+class OllamaLLM(BaseLLM):
+    """Ollama local LLM provider (fully open source)."""
+
+    def __init__(
+        self,
+        model: str,
+        base_url: str = "http://localhost:11434",
+        timeout: int = 300
+    ):
+        self.model = model
+        self.base_url = base_url
+        self.timeout = timeout
+
+    async def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text using Ollama API."""
+        url = f"{self.base_url}/api/generate"
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            **kwargs
+        }
+
+        response = requests.post(url, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+
+        return response.json()["response"]
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Chat completion using Ollama API."""
+        url = f"{self.base_url}/api/chat"
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            **kwargs
+        }
+
+        response = requests.post(url, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+
+        return response.json()["message"]["content"]
+
+
+class HuggingFaceLLM(BaseLLM):
+    """HuggingFace Transformers local LLM provider."""
+
+    def __init__(
+        self,
+        model_name: str,
+        cache_dir: Optional[str] = None,
+        device: str = "auto"
+    ):
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+
+        self.model_name = model_name
+        self.device = device
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            cache_dir=cache_dir
+        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+            torch_dtype=torch.float16,
+            device_map=device
+        )
+
+    async def generate(self, prompt: str, max_length: int = 512, **kwargs) -> str:
+        """Generate text using HuggingFace model."""
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+
+        outputs = self.model.generate(
+            **inputs,
+            max_length=max_length,
+            **kwargs
+        )
+
+        response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Remove the prompt from response
+        return response[len(prompt):].strip()
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Chat completion using HuggingFace model."""
+        # Format messages into a single prompt
+        prompt = self._format_messages(messages)
+        return await self.generate(prompt, **kwargs)
+
+    def _format_messages(self, messages: List[Dict[str, str]]) -> str:
+        """Format chat messages into a prompt."""
+        formatted = ""
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            if role == "system":
+                formatted += f"System: {content}\n\n"
+            elif role == "user":
+                formatted += f"User: {content}\n\n"
+            elif role == "assistant":
+                formatted += f"Assistant: {content}\n\n"
+        formatted += "Assistant: "
+        return formatted

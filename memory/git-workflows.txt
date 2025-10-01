@@ -1,0 +1,11 @@
+   3 clone → clone
+   1 remote → push
+   1 push → remote
+   1 push → push
+   1 push → clone
+   1 lfs → clone
+   1 init → checkout
+   1 commit → push
+   1 clone → init
+   1 checkout → add
+   1 add → commit

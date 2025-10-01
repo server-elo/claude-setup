@@ -1,0 +1,48 @@
+#!/bin/bash
+# Fast Code Index Builder - Uses all 12 cores in parallel
+
+set -e
+
+INDEX_DIR="$HOME/.claude/memory/code-index"
+PROJECTS_DIR="$HOME/Desktop"
+LOG="$HOME/.claude/logs/indexer.log"
+
+mkdir -p "$INDEX_DIR" "$(dirname "$LOG")"
+rm -f "$INDEX_DIR/files.jsonl" # Fresh index
+
+echo "🚀 Fast indexing using 12 cores..." | tee -a "$LOG"
+
+# Use ripgrep for blazing fast file discovery + indexing
+rg --files --type py --type js --type ts --type go \
+   "$PROJECTS_DIR" 2>/dev/null | \
+   parallel -j12 --pipe -N1000 '
+     while read file; do
+       [ -f "$file" ] || continue
+       name=$(basename "$file")
+       dir=$(dirname "$file")
+       lines=$(wc -l < "$file" 2>/dev/null || echo 0)
+       echo "{\"path\":\"$file\",\"name\":\"$name\",\"dir\":\"$dir\",\"lines\":$lines}"
+     done
+   ' >> "$INDEX_DIR/files.jsonl" 2>/dev/null || {
+     # Fallback if parallel not installed
+     while read file; do
+       [ -f "$file" ] || continue
+       name=$(basename "$file")
+       dir=$(dirname "$file")
+       lines=$(wc -l < "$file" 2>/dev/null || echo 0)
+       echo "{\"path\":\"$file\",\"name\":\"$name\",\"dir\":\"$dir\",\"lines\":$lines}"
+     done >> "$INDEX_DIR/files.jsonl"
+   }
+
+# Quick symbol index (functions/classes)
+echo "🔎 Indexing symbols..." | tee -a "$LOG"
+rg '^(class|def|function|func|type|interface)\s+(\w+)' \
+   "$PROJECTS_DIR" \
+   --no-heading --only-matching \
+   2>/dev/null | sort -u > "$INDEX_DIR/symbols.txt" || true
+
+total=$(wc -l < "$INDEX_DIR/files.jsonl" 2>/dev/null || echo 0)
+symbols=$(wc -l < "$INDEX_DIR/symbols.txt" 2>/dev/null || echo 0)
+
+echo "✅ Indexed $total files, $symbols symbols" | tee -a "$LOG"
+echo "📍 $INDEX_DIR"

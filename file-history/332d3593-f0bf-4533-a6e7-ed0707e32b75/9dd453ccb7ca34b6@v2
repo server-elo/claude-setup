@@ -1,0 +1,382 @@
+"""
+SGMem: Sentence Graph Memory for Long-Term Conversational Agents
+Based on arXiv:2509.21212 (September 2025)
+
+Key Innovation:
+- Represents dialogue as sentence-level graphs
+- Captures turn-, round-, and session-level associations
+- Semantic retrieval instead of simple last-N messages
+- Multi-session memory with graph-based context
+
+Author: Implemented from arXiv research for Sofia Voice AI
+"""
+import networkx as nx
+import numpy as np
+from typing import List, Dict, Tuple, Optional
+from datetime import datetime
+import time
+import pickle
+from pathlib import Path
+from loguru import logger
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    logger.warning("sentence-transformers not installed. SGMem will use fallback mode.")
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+
+
+class SentenceGraphMemory:
+    """
+    Sentence-level graph memory for long-term conversations
+
+    Architecture:
+    - Nodes: Individual sentences (user/assistant messages)
+    - Edges: Temporal (turn-level) + Semantic (similarity-based)
+    - Retrieval: Graph-based semantic search (not just last-N)
+
+    Benefits:
+    - Never forgets: All conversations stored in graph
+    - Semantic links: "dentist appointment" ↔ "next Tuesday" ↔ "2pm"
+    - Multi-session: Recalls context from previous conversations
+    - Fast retrieval: Pre-computed embeddings + graph structure
+    """
+
+    def __init__(
+        self,
+        model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
+        semantic_threshold: float = 0.7,
+        max_context_nodes: int = 10,
+        cache_dir: Optional[Path] = None
+    ):
+        """
+        Initialize Sentence Graph Memory
+
+        Args:
+            model_name: Sentence transformer model (German-capable)
+            semantic_threshold: Minimum similarity for semantic edges (0.0-1.0)
+            max_context_nodes: Maximum nodes to retrieve for context
+            cache_dir: Directory to save/load memory graph
+        """
+        self.graph = nx.DiGraph()
+        self.semantic_threshold = semantic_threshold
+        self.max_context_nodes = max_context_nodes
+        self.cache_dir = cache_dir or Path.home() / ".claude" / "memory" / "sgmem"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Session tracking
+        self.session_id = 0
+        self.turn_id = 0
+        self.round_id = 0  # Multiple turns can form a round (topic)
+
+        # Sentence encoder
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+            logger.info(f"Loading sentence transformer: {model_name}...")
+            self.encoder = SentenceTransformer(model_name)
+            logger.success("✅ SGMem initialized with semantic encoding")
+        else:
+            self.encoder = None
+            logger.warning("⚠️  SGMem running in fallback mode (no semantic encoding)")
+
+        # Load existing graph if available
+        self._load_graph()
+
+    def add_exchange(
+        self,
+        user_msg: str,
+        assistant_msg: str,
+        timestamp: Optional[float] = None,
+        metadata: Optional[Dict] = None
+    ) -> Tuple[str, str]:
+        """
+        Add user-assistant exchange to memory graph
+
+        Args:
+            user_msg: User's message
+            assistant_msg: Assistant's response
+            timestamp: Unix timestamp (auto-generated if None)
+            metadata: Additional metadata (intent, entities, etc.)
+
+        Returns:
+            (user_node_id, assistant_node_id)
+        """
+        if timestamp is None:
+            timestamp = time.time()
+
+        # Create unique node IDs
+        user_node_id = f"user_s{self.session_id}_t{self.turn_id}"
+        assistant_node_id = f"asst_s{self.session_id}_t{self.turn_id}"
+
+        # Encode messages semantically
+        if self.encoder:
+            user_embedding = self.encoder.encode(user_msg, convert_to_numpy=True)
+            assistant_embedding = self.encoder.encode(assistant_msg, convert_to_numpy=True)
+        else:
+            # Fallback: no embeddings
+            user_embedding = None
+            assistant_embedding = None
+
+        # Add user node
+        self.graph.add_node(user_node_id, **{
+            'text': user_msg,
+            'embedding': user_embedding,
+            'timestamp': timestamp,
+            'type': 'user',
+            'session': self.session_id,
+            'turn': self.turn_id,
+            'round': self.round_id,
+            'metadata': metadata or {}
+        })
+
+        # Add assistant node
+        self.graph.add_node(assistant_node_id, **{
+            'text': assistant_msg,
+            'embedding': assistant_embedding,
+            'timestamp': timestamp,
+            'type': 'assistant',
+            'session': self.session_id,
+            'turn': self.turn_id,
+            'round': self.round_id,
+            'metadata': metadata or {}
+        })
+
+        # Add temporal edge (turn-level: user → assistant)
+        self.graph.add_edge(
+            user_node_id,
+            assistant_node_id,
+            weight=1.0,
+            type='temporal',
+            relation='response'
+        )
+
+        # Add semantic edges to similar past messages
+        if self.encoder:
+            self._add_semantic_edges(user_node_id, user_embedding, 'user')
+            self._add_semantic_edges(assistant_node_id, assistant_embedding, 'assistant')
+
+        # Increment turn
+        self.turn_id += 1
+
+        logger.debug(f"Added exchange to graph: Turn {self.turn_id}, Session {self.session_id}")
+
+        return user_node_id, assistant_node_id
+
+    def _add_semantic_edges(
+        self,
+        node_id: str,
+        embedding: np.ndarray,
+        node_type: str
+    ):
+        """
+        Add semantic edges to similar past messages
+
+        Links sentences that talk about similar topics even if from different sessions
+        Example: "dentist appointment" (turn 5) ↔ "dental cleaning" (turn 20)
+        """
+        if embedding is None:
+            return
+
+        # Find similar nodes
+        for past_node_id in self.graph.nodes():
+            if past_node_id == node_id:
+                continue
+
+            past_data = self.graph.nodes[past_node_id]
+
+            # Only link same type (user-user, assistant-assistant)
+            if past_data['type'] != node_type:
+                continue
+
+            past_embedding = past_data.get('embedding')
+            if past_embedding is None:
+                continue
+
+            # Compute cosine similarity
+            similarity = self._cosine_similarity(embedding, past_embedding)
+
+            # Add edge if above threshold
+            if similarity > self.semantic_threshold:
+                self.graph.add_edge(
+                    node_id,
+                    past_node_id,
+                    weight=similarity,
+                    type='semantic',
+                    relation='similar_topic'
+                )
+                logger.debug(f"Semantic link: {node_id} ↔ {past_node_id} (sim={similarity:.2f})")
+
+    @staticmethod
+    def _cosine_similarity(emb1: np.ndarray, emb2: np.ndarray) -> float:
+        """Compute cosine similarity between two embeddings"""
+        dot_product = np.dot(emb1, emb2)
+        norm1 = np.linalg.norm(emb1)
+        norm2 = np.linalg.norm(emb2)
+        return dot_product / (norm1 * norm2 + 1e-8)
+
+    def retrieve_relevant_context(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        include_temporal: bool = True,
+        include_semantic: bool = True
+    ) -> List[Dict]:
+        """
+        Retrieve relevant context for a query using graph-based search
+
+        Args:
+            query: Current user query
+            k: Number of context nodes to retrieve (default: max_context_nodes)
+            include_temporal: Include temporally connected nodes
+            include_semantic: Include semantically similar nodes
+
+        Returns:
+            List of context dicts with text, type, turn, session, relevance score
+        """
+        if k is None:
+            k = self.max_context_nodes
+
+        if not self.encoder:
+            # Fallback: return last k nodes
+            logger.warning("No encoder available, returning last k nodes")
+            return self._get_last_k_nodes(k)
+
+        # Encode query
+        query_embedding = self.encoder.encode(query, convert_to_numpy=True)
+
+        # Score all nodes by semantic similarity
+        scores = []
+        for node_id in self.graph.nodes():
+            node_data = self.graph.nodes[node_id]
+            embedding = node_data.get('embedding')
+
+            if embedding is None:
+                continue
+
+            # Base score: semantic similarity
+            similarity = self._cosine_similarity(query_embedding, embedding)
+
+            # Boost score based on graph structure
+            boost = 1.0
+
+            # Boost recent messages (temporal decay)
+            recency_boost = 1.0 / (1.0 + (self.turn_id - node_data['turn']) * 0.1)
+            boost *= recency_boost
+
+            final_score = similarity * boost
+
+            scores.append((node_id, final_score, similarity))
+
+        # Get top-k nodes
+        top_nodes = sorted(scores, key=lambda x: x[1], reverse=True)[:k]
+
+        # Build context list
+        context = []
+        for node_id, final_score, similarity in top_nodes:
+            node_data = self.graph.nodes[node_id]
+            context.append({
+                'text': node_data['text'],
+                'type': node_data['type'],
+                'turn': node_data['turn'],
+                'session': node_data['session'],
+                'round': node_data['round'],
+                'timestamp': node_data['timestamp'],
+                'relevance': float(final_score),
+                'similarity': float(similarity),
+                'metadata': node_data.get('metadata', {})
+            })
+
+        logger.debug(f"Retrieved {len(context)} context nodes for query (k={k})")
+        return context
+
+    def _get_last_k_nodes(self, k: int) -> List[Dict]:
+        """Fallback: Get last k nodes (simple temporal retrieval)"""
+        all_nodes = list(self.graph.nodes(data=True))
+        last_k = all_nodes[-k:] if len(all_nodes) >= k else all_nodes
+
+        context = []
+        for node_id, node_data in last_k:
+            context.append({
+                'text': node_data['text'],
+                'type': node_data['type'],
+                'turn': node_data['turn'],
+                'session': node_data['session'],
+                'relevance': 1.0,  # No scoring in fallback
+                'metadata': node_data.get('metadata', {})
+            })
+        return context
+
+    def new_session(self):
+        """Start a new conversation session"""
+        self.session_id += 1
+        self.turn_id = 0
+        self.round_id = 0
+        logger.info(f"Started new session: {self.session_id}")
+
+    def new_round(self):
+        """Start a new conversation round (topic)"""
+        self.round_id += 1
+        logger.debug(f"Started new round: {self.round_id}")
+
+    def save_graph(self, filename: Optional[str] = None):
+        """Save memory graph to disk"""
+        if filename is None:
+            filename = f"sgmem_session_{self.session_id}.pkl"
+
+        filepath = self.cache_dir / filename
+
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'graph': self.graph,
+                'session_id': self.session_id,
+                'turn_id': self.turn_id,
+                'round_id': self.round_id
+            }, f)
+
+        logger.success(f"✅ Saved memory graph to {filepath}")
+
+    def _load_graph(self):
+        """Load most recent memory graph from disk"""
+        graph_files = list(self.cache_dir.glob("sgmem_session_*.pkl"))
+
+        if not graph_files:
+            logger.info("No existing memory graph found, starting fresh")
+            return
+
+        # Load most recent
+        latest = max(graph_files, key=lambda p: p.stat().st_mtime)
+
+        try:
+            with open(latest, 'rb') as f:
+                data = pickle.load(f)
+
+            self.graph = data['graph']
+            self.session_id = data['session_id']
+            self.turn_id = data['turn_id']
+            self.round_id = data['round_id']
+
+            logger.success(f"✅ Loaded memory graph from {latest}")
+            logger.info(f"   Nodes: {self.graph.number_of_nodes()}, Edges: {self.graph.number_of_edges()}")
+            logger.info(f"   Session: {self.session_id}, Turn: {self.turn_id}")
+        except Exception as e:
+            logger.error(f"Failed to load graph: {e}")
+
+    def get_stats(self) -> Dict:
+        """Get memory statistics"""
+        return {
+            'nodes': self.graph.number_of_nodes(),
+            'edges': self.graph.number_of_edges(),
+            'sessions': self.session_id + 1,
+            'turns': self.turn_id,
+            'rounds': self.round_id,
+            'temporal_edges': len([e for _, _, d in self.graph.edges(data=True) if d['type'] == 'temporal']),
+            'semantic_edges': len([e for _, _, d in self.graph.edges(data=True) if d['type'] == 'semantic'])
+        }
+
+    def clear(self):
+        """Clear all memory (use with caution!)"""
+        self.graph.clear()
+        self.session_id = 0
+        self.turn_id = 0
+        self.round_id = 0
+        logger.warning("⚠️  Cleared all memory")

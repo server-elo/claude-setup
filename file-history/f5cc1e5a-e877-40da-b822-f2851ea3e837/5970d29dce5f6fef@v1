@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-09-30T01:16:00Z",
+
+  "user_profile": {
+    "name": "tolga",
+    "coding_style": "unknown",
+    "preferred_languages": ["python", "javascript"],
+    "common_workflows": [
+      "cd desktop → cd sofia/project → claude",
+      "Uses pip3/python3 for Python scripts",
+      "Installs tools via brew",
+      "Works on voice/sofia projects frequently"
+    ],
+    "frequent_tasks": [
+      "Running Python agents (agent.py console)",
+      "Working in Desktop/sofia projects",
+      "Installing packages (brew, pip3, npm)"
+    ],
+    "learning_rate": "fast",
+    "most_used_commands": ["cd", "claude", "brew", "pip3", "python3"],
+    "project_locations": [
+      "~/Desktop/sofia1",
+      "~/Desktop/elo-deu",
+      "~/Desktop/quantum"
+    ]
+  },
+
+  "learned_patterns": {
+    "project_structures": {},
+    "coding_preferences": {},
+    "common_errors": {},
+    "successful_solutions": {}
+  },
+
+  "project_memory": {},
+
+  "optimization_rules": [
+    {
+      "rule": "index_code_on_startup",
+      "enabled": true,
+      "impact": "high"
+    },
+    {
+      "rule": "cache_file_locations",
+      "enabled": true,
+      "impact": "medium"
+    },
+    {
+      "rule": "remember_project_context",
+      "enabled": true,
+      "impact": "high"
+    }
+  ],
+
+  "improvements_made": [],
+
+  "metrics": {
+    "total_sessions": 0,
+    "total_tasks": 0,
+    "success_rate": 0,
+    "average_response_time": 0,
+    "user_satisfaction": 0
+  }
+}

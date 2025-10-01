@@ -1,0 +1,144 @@
+#!/bin/bash
+# V3 Autonomous Intelligence Daemon
+# Runs continuously, monitors everything, acts proactively
+
+DAEMON_PID=$$
+LOG=~/.claude/logs/autonomous-daemon.log
+STATE=~/.claude/memory/autonomous-state.json
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
+}
+
+# Initialize state
+init_state() {
+    cat > "$STATE" << 'EOJSON'
+{
+  "status": "running",
+  "start_time": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+  "cycles": 0,
+  "actions_taken": [],
+  "context_preloaded": [],
+  "suggestions_made": []
+}
+EOJSON
+}
+
+# Monitor git repositories using GitHub intelligence tracker
+monitor_git() {
+    # Use the new MCP GitHub tracker
+    ~/.claude/scripts/mcp-github-tracker.sh daemon
+
+    # Get quick status from Python integration
+    local report=$(python3 ~/.claude/scripts/mcp-github-integration.py daemon-report 2>/dev/null)
+
+    if [ $? -eq 0 ]; then
+        local action_needed=$(echo "$report" | jq -r '.action_needed')
+        local uncommitted=$(echo "$report" | jq -r '.metrics.uncommitted_files')
+        local unpushed=$(echo "$report" | jq -r '.metrics.unpushed_commits')
+
+        if [ "$action_needed" = "true" ]; then
+            log "GitHub Intelligence: $uncommitted uncommitted files, $unpushed unpushed commits"
+
+            # Record in state with SAFE file locking
+            ~/.claude/scripts/safe-json-update.sh "$STATE" ".actions_taken += [\"GitHub tracking alert: action needed\"]" 2>/dev/null || true
+        fi
+    fi
+}
+
+# Predict next likely action based on time/context
+predict_next_action() {
+    HOUR=$(date +%H)
+    
+    # Evening pattern: usually work on sofia-pers
+    if [ "$HOUR" -ge 18 ] && [ "$HOUR" -le 23 ]; then
+        if [ ! -f /tmp/context-preloaded-sofia ]; then
+            log "🔮 PREDICTION: User likely to work on sofia-pers (evening pattern)"
+            log "⚡ PRE-LOADING: sofia-pers context..."
+            
+            # Pre-load context
+            cd ~/Desktop/elvi/sofia-pers
+            # Check if project is healthy
+            if [ ! -d .venv ]; then
+                log "⚠️  PRE-CHECK: sofia-pers missing venv"
+            fi
+            
+            touch /tmp/context-preloaded-sofia
+        fi
+    fi
+}
+
+# Monitor for error patterns
+monitor_errors() {
+    # Check if error rate increasing
+    RECENT_ERRORS=$(tail -50 ~/.claude/memory/error-patterns.txt 2>/dev/null | wc -l)
+    if [ "$RECENT_ERRORS" -gt 10 ]; then
+        log "🚨 ALERT: High error rate detected ($RECENT_ERRORS recent)"
+        log "💡 SUGGESTION: Take a break? Error rate increases with fatigue"
+    fi
+}
+
+# Proactive health checks
+proactive_health_check() {
+    # Check disk space
+    DISK_USAGE=$(df -h . | tail -1 | awk '{print $5}' | sed 's/%//')
+    if [ "$DISK_USAGE" -gt 80 ]; then
+        log "⚠️  ALERT: Disk usage $DISK_USAGE% - consider cleanup"
+    fi
+    
+    # Check if learning daemon running
+    if ! pgrep -f "learning-daemon.sh" > /dev/null; then
+        log "❌ ALERT: Learning daemon stopped - attempting restart"
+        ~/.claude/scripts/daemon-control.sh start
+    fi
+}
+
+# Main autonomous loop
+autonomous_loop() {
+    log "🚀 V3 Autonomous Daemon started (PID: $DAEMON_PID)"
+    init_state
+    
+    CYCLE=0
+    while true; do
+        CYCLE=$((CYCLE + 1))
+        
+        # Update cycle count with SAFE file locking
+        ~/.claude/scripts/safe-json-update.sh "$STATE" ".cycles = $CYCLE" 2>/dev/null || true
+        
+        # Execute autonomous functions
+        monitor_git
+        predict_next_action
+        monitor_errors
+        proactive_health_check
+        
+        # Sleep 60 seconds between cycles
+        sleep 60
+    done
+}
+
+# Start daemon
+case "$1" in
+    start)
+        autonomous_loop &
+        echo $! > ~/.claude/pids/autonomous-daemon.pid
+        log "✅ Autonomous daemon started"
+        ;;
+    stop)
+        if [ -f ~/.claude/pids/autonomous-daemon.pid ]; then
+            kill $(cat ~/.claude/pids/autonomous-daemon.pid)
+            rm ~/.claude/pids/autonomous-daemon.pid
+            log "🛑 Autonomous daemon stopped"
+        fi
+        ;;
+    status)
+        if [ -f ~/.claude/pids/autonomous-daemon.pid ] && kill -0 $(cat ~/.claude/pids/autonomous-daemon.pid) 2>/dev/null; then
+            echo "✅ Autonomous daemon running"
+            cat "$STATE" | jq .
+        else
+            echo "❌ Autonomous daemon not running"
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status}"
+        ;;
+esac

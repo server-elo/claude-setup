@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-09-30",
+  "metrics": {
+    "total_sessions": 106,
+    "successful_tasks": 0,
+    "failed_tasks": 0,
+    "shortcuts_created": 0,
+    "patterns_detected": 60
+  },
+  "learned_patterns": [],
+  "failed_approaches": [],
+  "user_preferences": {
+    "languages": [
+      "Python",
+      "JavaScript"
+    ],
+    "work_location": "~/Desktop/",
+    "primary_projects": [
+      "sofia-pers",
+      "sofia1",
+      "quantum",
+      "elo-deu"
+    ]
+  },
+  "last_learning_cycle": "2025-09-30T15:13:08Z"
+}

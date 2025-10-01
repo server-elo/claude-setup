@@ -1,0 +1,59 @@
+#!/bin/bash
+# Build searchable index of all code on your machine
+# This makes Claude MUCH faster at finding things
+
+set -euo pipefail
+
+INDEX_DIR="$HOME/.claude/memory/code-index"
+mkdir -p "$INDEX_DIR"
+
+echo "🔍 Building code index..."
+
+# Index common project locations
+SEARCH_DIRS=(
+    "$HOME/Desktop"
+    "$HOME/Documents"
+    "$HOME/Projects"
+)
+
+# Find all code files and create index
+find "${SEARCH_DIRS[@]}" -type f \
+    \( -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" \
+    -o -name "*.py" -o -name "*.go" -o -name "*.rs" -o -name "*.java" \
+    -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) \
+    2>/dev/null | while read -r file; do
+
+    # Calculate file hash for change detection
+    hash=$(shasum -a 256 "$file" | cut -d' ' -f1)
+
+    # Extract key information
+    filename=$(basename "$file")
+    dirname=$(dirname "$file")
+    extension="${filename##*.}"
+    size=$(wc -l < "$file" 2>/dev/null || echo 0)
+    modified=$(stat -f "%m" "$file" 2>/dev/null || stat -c "%Y" "$file" 2>/dev/null)
+
+    # Store in index
+    echo "{\"path\":\"$file\",\"name\":\"$filename\",\"dir\":\"$dirname\",\"ext\":\"$extension\",\"lines\":$size,\"modified\":$modified,\"hash\":\"$hash\"}" >> "$INDEX_DIR/files.jsonl"
+
+done
+
+# Count results
+total=$(wc -l < "$INDEX_DIR/files.jsonl" 2>/dev/null || echo 0)
+echo "✅ Indexed $total code files"
+
+# Create reverse index for fast lookups
+echo "📊 Building reverse index..."
+cat "$INDEX_DIR/files.jsonl" | jq -r '.name' | sort | uniq -c | sort -rn > "$INDEX_DIR/filename-frequency.txt"
+
+# Index function/class names using ripgrep
+echo "🔎 Indexing functions and classes..."
+rg --type js --type ts --type py --type go \
+   '(function|def|class|func|fn|interface|type|struct)\s+(\w+)' \
+   "${SEARCH_DIRS[@]}" \
+   --no-filename \
+   --no-line-number \
+   2>/dev/null | sort | uniq > "$INDEX_DIR/symbols.txt" || true
+
+echo "✅ Code index complete!"
+echo "📍 Location: $INDEX_DIR"

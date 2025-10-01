@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""
+SOFIA LOCAL - OPTIMIZED (Research-Backed)
+Implementing insights from 4 cutting-edge arXiv papers
+
+Performance Targets:
+- ASR: <500ms (WhisperKit: arxiv.org/abs/2507.10860)
+- TTS: <150ms first-packet (VoXtream: arxiv.org/abs/2509.15969)
+- Total: <1000ms end-to-end (Voila-inspired: arxiv.org/abs/2505.02707)
+
+Baseline: ~3000-5000ms → Target: <1000ms (3-5x improvement)
+
+Usage:
+    python agent_optimized.py console  → OPTIMIZED mode (faster-whisper + VoXtream)
+    python agent.py console            → BASELINE mode (standard whisper)
+
+Author: Built with Claude Code + arXiv research
+"""
+import sys
+import os
+from loguru import logger
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from voice.console_handler_optimized import OptimizedConsoleHandler
+from agent.prompts import AGENT_INSTRUCTION
+
+
+def print_banner():
+    """Print optimized Sofia banner"""
+    banner = """
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   ███████╗ ██████╗ ███████╗██╗ █████╗                       ║
+║   ██╔════╝██╔═══██╗██╔════╝██║██╔══██╗                      ║
+║   ███████╗██║   ██║█████╗  ██║███████║                      ║
+║   ╚════██║██║   ██║██╔══╝  ██║██╔══██║                      ║
+║   ███████║╚██████╔╝██║     ██║██║  ██║                      ║
+║   ╚══════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝                      ║
+║                                                              ║
+║         OPTIMIZED MODE - Research-Backed Latency             ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+🚀 OPTIMIZATIONS ACTIVE:
+   ✅ faster-whisper (4x speedup vs standard Whisper)
+   ✅ VoXtream-style streaming TTS (<150ms first-packet)
+   ✅ 5-thread parallel pipeline (STT + LLM + TTS overlap)
+   ✅ Automatic VAD speech detection
+   ✅ Sentence-by-sentence generation
+
+📊 PERFORMANCE TARGETS (From Research Papers):
+   - ASR Latency:      <500ms  (WhisperKit: 460ms)
+   - TTS First-Packet: <150ms  (VoXtream: 102ms)
+   - Total Response:   <1000ms (Voila: 195ms + margin)
+
+📚 BASED ON:
+   - VoXtream (arXiv:2509.15969) - Ultra-low latency TTS
+   - WhisperKit (arXiv:2507.10860) - On-device ASR optimization
+   - Voila (arXiv:2505.02707) - Full-duplex conversation
+   - TTS-1 (arXiv:2507.21138) - Real-time speech synthesis
+
+Baseline (standard whisper): ~3000-5000ms
+Target (optimized):          <1000ms
+Expected Improvement:        3-5x faster
+
+Cost: $0.00 - 100% Free & Private
+"""
+    print(banner)
+
+
+def check_ollama():
+    """Check if Ollama is running"""
+    try:
+        import ollama
+
+        response = ollama.list()
+        logger.success("✅ Ollama is running")
+
+        model_names = [m.model for m in response.models]
+
+        if any('gemma2:2b' in name for name in model_names):
+            logger.success("✅ gemma2:2b model found")
+        elif model_names:
+            logger.warning(f"⚠️  gemma2:2b not found")
+            logger.info(f"   Available models: {', '.join(model_names[:3])}")
+        else:
+            logger.error("❌ No models found. Install: ollama pull gemma2:2b")
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Ollama error: {e}")
+        print("\n🔧 How to fix:")
+        print("   1. Install Ollama: https://ollama.com")
+        print("   2. Start Ollama: ollama serve")
+        print("   3. Pull model: ollama pull gemma2:2b")
+        return False
+
+
+def check_dependencies():
+    """Check if optimized dependencies are installed"""
+    try:
+        import faster_whisper
+        logger.success("✅ faster-whisper installed")
+    except ImportError:
+        logger.error("❌ faster-whisper not installed")
+        print("\n🔧 Install optimized dependencies:")
+        print("   pip install faster-whisper")
+        print("\n   Or: pip install -r requirements.txt")
+        return False
+
+    return True
+
+
+def main():
+    """Main entry point"""
+    os.system('clear' if os.name != 'nt' else 'cls')
+
+    print_banner()
+
+    # Check arguments
+    if len(sys.argv) < 2:
+        logger.error("❌ ERROR: Mode not specified")
+        print("\nUSAGE:")
+        print("   python agent_optimized.py console  → Optimized mode")
+        print("   python agent.py console            → Baseline mode")
+        sys.exit(1)
+
+    mode = sys.argv[1].lower()
+
+    if mode != "console":
+        logger.error(f"❌ ERROR: Invalid mode '{mode}'")
+        print("\nOPTIMIZED mode only supports 'console' for now")
+        print("Use: python agent_optimized.py console")
+        sys.exit(1)
+
+    # Check dependencies
+    if not check_dependencies():
+        sys.exit(1)
+
+    # Check Ollama
+    if not check_ollama():
+        sys.exit(1)
+
+    logger.info(f"🚀 Starting OPTIMIZED Sofia...")
+
+    try:
+        # Initialize optimized handler
+        handler = OptimizedConsoleHandler(llm_model="gemma2:2b", language="de")
+        handler.run_conversation(system_prompt=AGENT_INSTRUCTION)
+        handler.cleanup()
+
+    except KeyboardInterrupt:
+        print("\n\n👋 Auf Wiedersehen!")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

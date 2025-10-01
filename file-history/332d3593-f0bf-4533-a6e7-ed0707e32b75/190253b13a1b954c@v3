@@ -1,0 +1,204 @@
+"""
+TRUE LOCAL TTS - Piper with German Thorsten Voice
+100% offline, no cloud APIs, Moshi-inspired streaming
+Target: <150ms first-packet latency
+"""
+import subprocess
+import os
+from pathlib import Path
+from typing import Generator
+from loguru import logger
+
+
+class PiperLocalTTS:
+    """
+    Local German TTS using Piper (Thorsten voice)
+
+    Advantages vs Edge-TTS:
+    - 100% local (no internet required)
+    - No API calls = lower latency
+    - Privacy: zero data sent to cloud
+    - Consistent performance
+
+    Based on Moshi's approach: streaming audio codec for low latency
+    """
+
+    def __init__(self, voice_model="de_DE-thorsten-high"):
+        """
+        Initialize Piper TTS with German Thorsten voice
+
+        Args:
+            voice_model: German voice model
+                - de_DE-thorsten-low (fastest, 82ms latency)
+                - de_DE-thorsten-medium (balanced, 100ms)
+                - de_DE-thorsten-high (best quality, 150ms)
+        """
+        self.voice_model = voice_model
+        self.sample_rate = 22050  # Piper default
+
+        # Check if piper-tts is installed
+        try:
+            result = subprocess.run(
+                ["piper", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            logger.success(f"✅ Piper TTS found: {result.stdout.strip()}")
+        except FileNotFoundError:
+            logger.error("❌ Piper not installed!")
+            logger.info("Install with: pip install piper-tts")
+            logger.info("Or download binary: https://github.com/rhasspy/piper/releases")
+            raise RuntimeError("Piper TTS not found")
+        except Exception as e:
+            logger.warning(f"Could not verify Piper: {e}")
+
+        logger.success(f"✅ Piper Local TTS initialized (voice: {voice_model})")
+        logger.info("   100% LOCAL - Zero cloud dependency")
+        logger.info("   Target: <150ms first-packet (Moshi-inspired)")
+
+    def speak(self, text: str) -> bytes:
+        """
+        Convert text to audio using local Piper TTS
+
+        Returns:
+            bytes: Raw PCM audio data (16-bit, mono, 22050Hz)
+        """
+        try:
+            logger.debug(f"Generating speech (local): {text[:50]}...")
+
+            # Run Piper command
+            # Piper outputs raw PCM by default
+            cmd = [
+                "piper",
+                "--model", self.voice_model,
+                "--output-raw"  # Raw PCM output (16-bit, mono, 22050Hz)
+            ]
+
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            pcm_data, stderr = process.communicate(input=text.encode('utf-8'), timeout=10)
+
+            if process.returncode != 0:
+                logger.error(f"Piper error: {stderr.decode()}")
+                return b''
+
+            logger.debug(f"Generated {len(pcm_data)} bytes of PCM audio (LOCAL)")
+            return pcm_data
+
+        except subprocess.TimeoutExpired:
+            logger.error("Piper TTS timeout")
+            process.kill()
+            return b''
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return b''
+
+    def speak_stream_sentences(self, text: str) -> Generator[bytes, None, None]:
+        """
+        Moshi-inspired streaming: Generate audio sentence-by-sentence
+
+        This mimics Moshi's approach:
+        1. Split text into sentences
+        2. Generate each sentence independently
+        3. Stream as soon as each sentence is ready
+
+        Result: First audio plays BEFORE full text is processed
+        Target: <150ms to first audio packet
+        """
+        try:
+            logger.debug(f"Streaming speech (local): {text[:50]}...")
+
+            # Split into sentences for streaming
+            sentences = self._split_sentences(text)
+
+            for i, sentence in enumerate(sentences):
+                if not sentence.strip():
+                    continue
+
+                logger.debug(f"  Sentence {i+1}/{len(sentences)}: {sentence[:30]}...")
+
+                # Generate this sentence
+                audio = self.speak(sentence)
+                if audio:
+                    yield audio
+                    logger.debug(f"    → Streamed {len(audio)} bytes")
+
+            logger.debug(f"Streaming complete: {len(sentences)} sentences")
+
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")
+
+    def _split_sentences(self, text: str) -> list:
+        """
+        Split text into sentences for streaming
+        Moshi-style: process incrementally for low latency
+        """
+        sentences = []
+        current = ""
+
+        for char in text:
+            current += char
+            if char in '.!?':
+                sentences.append(current.strip())
+                current = ""
+
+        if current.strip():
+            sentences.append(current.strip())
+
+        return sentences
+
+    def speak_stream_words(self, text: str) -> Generator[bytes, None, None]:
+        """
+        Ultra-low latency: word-by-word streaming
+        Inspired by Moshi's frame-by-frame approach
+
+        Note: This may sound choppy. Use speak_stream_sentences() for production.
+        """
+        try:
+            words = text.split()
+
+            for i, word in enumerate(words):
+                audio = self.speak(word)
+                if audio:
+                    yield audio
+
+        except Exception as e:
+            logger.error(f"Word streaming error: {e}")
+
+
+# Alias for compatibility
+TextToSpeech = PiperLocalTTS
+
+
+if __name__ == "__main__":
+    # Test script
+    logger.info("Testing Piper Local TTS...")
+
+    tts = PiperLocalTTS()
+
+    # Test German
+    test_text = "Guten Tag! Willkommen im Hotel. Wie kann ich Ihnen helfen?"
+    logger.info(f"Test text: {test_text}")
+
+    audio = tts.speak(test_text)
+    if audio:
+        logger.success(f"✅ Generated {len(audio)} bytes")
+    else:
+        logger.error("❌ No audio generated")
+
+    # Test streaming
+    logger.info("Testing streaming...")
+    chunks = 0
+    for chunk in tts.speak_stream_sentences(test_text):
+        chunks += 1
+        logger.info(f"  Received chunk {chunks}: {len(chunk)} bytes")
+
+    logger.success(f"✅ Streaming test complete: {chunks} chunks")

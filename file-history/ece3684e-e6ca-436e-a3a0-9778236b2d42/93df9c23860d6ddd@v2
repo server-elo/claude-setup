@@ -1,0 +1,451 @@
+# Voila Architecture Analysis for Sofia Integration
+
+**Date:** 2025-10-01
+**Goal:** Extract key techniques from Voila → Apply to Sofia voice AI
+
+---
+
+## 🔬 Core Architecture Components
+
+### 1. **Audio Tokenization (voila_tokenizer.py)**
+
+**Key Technology:** EncodecModel (Facebook Meta's neural audio codec)
+
+```python
+class VoilaTokenizer:
+    # Uses EncodecModel from HuggingFace
+    model = EncodecModel.from_pretrained("maitrix-org/Voila-Tokenizer")
+
+    # Encode: Audio → Discrete Tokens (4 codebooks)
+    def encode(wav, sr) -> audio_codes  # Shape: [4, seq_len]
+
+    # Decode: Tokens → Audio
+    def decode(audio_codes) -> wav  # Shape: [1, samples]
+```
+
+**How it achieves low latency:**
+- **RVQ (Residual Vector Quantization):** 4-layer quantization
+- **Compression ratio:** ~75:1 (16kHz audio → ~50 tokens/sec)
+- **Bandwidth:** 1.1 kbps (ultra-low)
+- **No intermediate text:** Direct audio → tokens → audio
+
+**Sofia Application:**
+```python
+# Instead of Sofia's current pipeline:
+# Audio → Whisper (2000ms) → Text → LLM → Text → Edge TTS (1200ms)
+
+# Voila-inspired approach:
+# Audio → EncodecTokenizer (50ms) → LLM with audio tokens → Decode (50ms)
+```
+
+---
+
+### 2. **Multi-Codebook Architecture (model.py)**
+
+**Key Innovation:** Process 4 audio codebooks simultaneously
+
+```python
+# input_ids shape: [batch, seq_len, num_codebooks=4]
+# Each token position has 4 codes (one per RVQ layer)
+
+# Step 1: Embed each codebook separately
+inputs_embeds = self.model.embed_tokens(input_ids)  # [bs, seq, 4, hidden_dim]
+
+# Step 2: Average across codebooks
+inputs_embeds = inputs_embeds.mean(dim=2)  # [bs, seq, hidden_dim]
+```
+
+**Why this matters:**
+- **Hierarchical audio representation:** Each codebook captures different frequency ranges
+- **Semantic vs acoustic separation:** Lower codebooks = phonetics, higher = prosody/style
+- **Parallel processing:** All 4 codes processed at once (not sequential)
+
+**Sofia Application:**
+- Current Sofia uses single text stream
+- Multi-codebook would allow capturing:
+  - Codebook 1: Words (semantic)
+  - Codebook 2: Emotion/tone
+  - Codebook 3: Pitch/prosody
+  - Codebook 4: Background/speaker characteristics
+
+---
+
+### 3. **Unified End-to-End Model (LLaMA-based)**
+
+**Key Architecture:** Modified LLaMA with audio extensions
+
+```python
+class VoilaModel(LlamaPreTrainedModel):
+    def __init__(self, config):
+        self.model = LlamaModel(config)  # Base LLM (text understanding)
+        self.audio_transformer = AudioTransformer(config)  # Audio-specific layers
+        self.ref_emb_linear = nn.Linear(256, hidden_size)  # Voice identity
+```
+
+**How it combines text + audio:**
+1. **Shared vocabulary:** Text tokens (0-32000) + Audio tokens (32000+)
+2. **Unified embeddings:** Same embedding space for text and audio
+3. **Cross-modal attention:** LLM can attend to both modalities simultaneously
+
+**Latency breakdown (claimed 195ms):**
+- Audio encoding: ~50ms (Encodec)
+- LLM generation: ~100ms (optimized inference)
+- Audio decoding: ~45ms (Encodec)
+- **Total: 195ms**
+
+**Sofia Current (3000-5000ms):**
+- Whisper STT: ~2000ms
+- Ollama gemma2:2b: ~500ms
+- Edge TTS (cloud): ~1200ms
+- Network overhead: ~300ms
+- **Total: 4000ms**
+
+---
+
+### 4. **Speaker Embeddings (spkr.py)**
+
+**Voice Customization Technology:**
+
+```python
+class SpeakerEmbedding:
+    # Extract 256-dim voice identity from 10-second sample
+    def __call__(wav, sr) -> embedding  # Shape: [256]
+```
+
+**Uses:** pyannote.audio speaker verification model
+
+**How voice cloning works:**
+1. Extract speaker embedding from reference audio (10 sec)
+2. Inject into model via `ref_emb_linear` layer
+3. Model conditions all audio generation on this voice identity
+
+**Sofia Application:**
+- Create "hotel receptionist" voice profile once
+- Reuse for all conversations (no re-encoding)
+- Can switch personas instantly (different embeddings)
+
+---
+
+### 5. **Audio Transformer (audio_transformer.py)**
+
+**Specialized architecture for audio tokens:**
+
+```python
+class AudioTransformer:
+    # Custom KV-cache for audio-specific attention
+    # RoPE (Rotary Position Embeddings) for temporal modeling
+    # GroupedQueryAttention for efficiency
+```
+
+**Key optimizations:**
+- **Custom KV-cache:** Faster than HuggingFace default (seen_tokens issue we hit)
+- **Rotary embeddings:** Better temporal modeling than absolute positions
+- **Grouped-query attention:** Fewer KV heads than Q heads (faster, less memory)
+- **RMSNorm instead of LayerNorm:** ~2x faster normalization
+
+---
+
+## 🎯 Key Techniques Sofia Can Adopt
+
+### **Technique 1: Audio Tokenization (Immediate Win)**
+
+**Implementation:**
+```python
+# Install: pip install transformers encodec
+from transformers import EncodecModel, AutoProcessor
+
+class SofiaAudioTokenizer:
+    def __init__(self):
+        self.encoder = EncodecModel.from_pretrained("facebook/encodec_24khz")
+        self.processor = AutoProcessor.from_pretrained("facebook/encodec_24khz")
+
+    def audio_to_tokens(self, wav, sr):
+        # Convert audio to discrete tokens
+        encoder_outputs = self.encoder.encode(wav, bandwidth=1.5)
+        return encoder_outputs.audio_codes[0, 0]  # Shape: [4, seq_len]
+
+    def tokens_to_audio(self, tokens):
+        # Convert tokens back to audio
+        audio_values = self.encoder.decode(tokens[None, None, :, :])
+        return audio_values[0, 0].cpu().numpy()
+```
+
+**Expected improvement:**
+- **STT replacement:** Audio encoding ~50ms (vs Whisper 2000ms)
+- **TTS replacement:** Audio decoding ~50ms (vs Edge TTS 1200ms)
+- **Potential speedup:** 40x for STT, 24x for TTS
+
+---
+
+### **Technique 2: Merge Pipeline Stages**
+
+**Current Sofia (4 stages):**
+```
+Audio → STT → Text → LLM → Text → TTS → Audio
+2000ms + 500ms + 1200ms = 3700ms
+```
+
+**Voila approach (1 stage):**
+```
+Audio → Unified Model → Audio
+195ms total
+```
+
+**Hybrid Sofia (2 stages - realistic):**
+```python
+# Stage 1: Audio → Tokens (replace Whisper)
+tokens = audio_tokenizer.encode(audio)  # 50ms
+
+# Stage 2: LLM processes audio tokens directly
+# Modify Ollama to accept token input (not text)
+# Or use multimodal LLM (Gemini, GPT-4o)
+
+# Stage 3: Tokens → Audio (replace Edge TTS)
+audio = audio_tokenizer.decode(tokens)  # 50ms
+
+# New total: 50 + 500 + 50 = 600ms (6x faster!)
+```
+
+---
+
+### **Technique 3: Voice Identity Injection**
+
+**Create hotel receptionist voice:**
+
+```python
+# 1. Record 10-second sample of desired voice
+from pyannote.audio import Inference
+inference = Inference("pyannote/speaker-embedding")
+
+# 2. Extract embedding
+receptionist_voice = inference("receptionist_sample.wav")  # [256]
+
+# 3. Use in generation
+# Pass to LLM as conditioning signal
+# (Requires LLM with speaker conditioning support)
+```
+
+**Benefits:**
+- Consistent voice across all responses
+- No re-encoding voice each time
+- Can create multiple personas (formal, friendly, etc.)
+
+---
+
+### **Technique 4: Streaming Architecture**
+
+**Voila's streaming approach:**
+```python
+def generate_streaming(audio_input):
+    # Encode audio incrementally (as it arrives)
+    tokens = []
+    for chunk in audio_input:
+        tokens.append(encode_chunk(chunk))
+
+    # Generate response tokens incrementally
+    for output_token in model.generate_stream(tokens):
+        yield decode_token(output_token)  # Play audio as generated
+```
+
+**Sofia could implement:**
+- **VAD-based chunking:** Already has WebRTC VAD
+- **Incremental encoding:** Encode 50ms chunks on-the-fly
+- **Streaming decode:** Start playing audio before full response generated
+
+**Latency impact:**
+- **First-packet latency:** 50ms (vs 3700ms current)
+- **Perceived responsiveness:** Massive improvement
+
+---
+
+## 📊 Performance Comparison
+
+| Component | Sofia Current | Voila | Hybrid Sofia (Realistic) |
+|-----------|---------------|-------|--------------------------|
+| **STT** | Whisper: 2000ms | Encodec: 50ms | Encodec: 50ms |
+| **LLM** | Ollama: 500ms | Custom: 100ms | Ollama: 500ms |
+| **TTS** | Edge TTS: 1200ms | Encodec: 45ms | Encodec: 50ms |
+| **Network** | 300ms | 0ms (local) | 0ms (local) |
+| **TOTAL** | **4000ms** | **195ms** | **600ms** |
+| **Speedup** | Baseline | **20.5x faster** | **6.7x faster** |
+
+---
+
+## 🚀 Sofia Integration Roadmap
+
+### **Phase 1: Audio Tokenizer (Week 1)**
+```python
+# File: src/voice/audio_tokenizer.py
+# Replace: Whisper STT + Edge TTS
+# With: Encodec tokenizer
+# Expected: 2000ms → 50ms (STT), 1200ms → 50ms (TTS)
+```
+
+**Implementation steps:**
+1. Install `transformers` and `encodec`
+2. Create `AudioTokenizer` class (similar to voila_tokenizer.py)
+3. Test encoding/decoding quality with German audio
+4. Measure latency improvements
+
+---
+
+### **Phase 2: LLM Audio Token Support (Week 2-3)**
+```python
+# Modify: src/voice/llm.py
+# Change: Text input → Token input
+# Options:
+# A) Use multimodal LLM (GPT-4o, Gemini)
+# B) Fine-tune Ollama model for audio tokens
+# C) Keep text but use tokenizer for TTS only (hybrid)
+```
+
+**Recommendation:** Start with Option C (hybrid)
+- Keep Whisper → text (familiar, works)
+- Replace Edge TTS with Encodec decoder
+- **Immediate win:** 1200ms → 50ms (TTS only)
+
+---
+
+### **Phase 3: Voice Customization (Week 4)**
+```python
+# File: src/voice/speaker.py
+# Create: Hotel receptionist voice profile
+# Use: pyannote.audio for embeddings
+```
+
+**Steps:**
+1. Record 10-second sample of desired voice
+2. Extract speaker embedding
+3. Condition TTS generation on embedding
+4. Test voice consistency
+
+---
+
+### **Phase 4: Streaming (Week 5-6)**
+```python
+# File: src/voice/streaming_handler.py
+# Implement: Incremental audio generation
+# Like: VADConsoleVoiceHandler but with audio tokens
+```
+
+**Architecture:**
+```python
+class StreamingAudioHandler:
+    def __init__(self):
+        self.vad = WebRTCVAD()
+        self.tokenizer = AudioTokenizer()
+
+    async def process_stream(self, audio_stream):
+        # Encode incrementally
+        for chunk in self.vad.chunk_audio(audio_stream):
+            tokens = self.tokenizer.encode_chunk(chunk)
+
+            # Generate response tokens
+            for output in self.llm.generate_stream(tokens):
+                # Decode and play immediately
+                audio = self.tokenizer.decode_token(output)
+                yield audio  # Play as generated
+```
+
+---
+
+## 🎯 Quick Win: Hybrid Sofia v2
+
+**Minimal changes, maximum impact:**
+
+```python
+# File: src/voice/tts_encodec.py (NEW)
+from transformers import EncodecModel, AutoProcessor
+
+class EncodecTTS:
+    def __init__(self):
+        self.model = EncodecModel.from_pretrained("facebook/encodec_24khz")
+        self.processor = AutoProcessor.from_pretrained("facebook/encodec_24khz")
+
+    def synthesize(self, text):
+        # Option 1: Use existing TTS for initial generation
+        from TTS.api import TTS as CoquiTTS
+        tts = CoquiTTS("tts_models/de/thorsten/tacotron2-DDC")
+        wav = tts.tts(text)  # ~500ms (local, faster than Edge)
+
+        # Option 2: Encode → decode for voice transformation
+        tokens = self.model.encode(wav, bandwidth=1.5)
+        # Inject speaker embedding here
+        enhanced_wav = self.model.decode(tokens)
+        return enhanced_wav
+```
+
+**Expected result:**
+- **Old:** Edge TTS cloud = 1200ms
+- **New:** Coqui TTS local = 500ms
+- **With Encodec enhancement:** +100ms = 600ms total
+- **Improvement:** 2x faster, better voice quality
+
+---
+
+## 📋 Key Learnings
+
+### **What Makes Voila Fast:**
+1. **No text intermediate:** Direct audio → audio
+2. **Neural codec:** Encodec (50ms) vs traditional TTS (1200ms)
+3. **Unified model:** Single forward pass (no pipeline)
+4. **Optimized inference:** Flash attention, custom KV-cache
+5. **Local execution:** No network latency
+
+### **What Sofia Can Realistically Adopt:**
+1. ✅ **Audio tokenization** (Encodec) - Easy, huge impact
+2. ✅ **Local TTS** (Coqui) - Replace Edge TTS
+3. ⚠️ **Unified model** - Hard, requires GPU + training
+4. ✅ **Speaker embeddings** - Medium, adds personality
+5. ✅ **Streaming** - Medium, improves UX
+
+### **Hardware Constraints:**
+- **Voila requires:** CUDA GPU (NVIDIA)
+- **Sofia runs on:** CPU (Mac ARM64)
+- **Compromise:** Use Encodec (CPU-friendly) + lightweight LLM
+
+---
+
+## 🔗 Code References
+
+**Voila Repository:**
+- `voila_tokenizer.py:10-51` - Audio tokenization logic
+- `model.py:281-360` - Unified LLM architecture
+- `audio_transformer.py:90-175` - Optimized audio attention
+- `spkr.py` - Speaker embedding extraction
+
+**Sofia Integration Points:**
+- `src/voice/stt_optimized.py` - Replace with Encodec encoder
+- `src/voice/tts.py` - Replace Edge TTS with Encodec decoder
+- `src/voice/llm.py` - Add token input support (future)
+- `agent.py:ConsoleVoiceHandler` - Add streaming support
+
+---
+
+## 🎓 Next Steps
+
+1. **Immediate (Today):**
+   - Install Encodec: `pip install transformers encodec`
+   - Test basic encoding/decoding with German audio
+   - Measure latency vs current pipeline
+
+2. **This Week:**
+   - Create `AudioTokenizer` wrapper class
+   - Replace Edge TTS in one handler (test)
+   - Benchmark improvements
+
+3. **Next Week:**
+   - Add speaker embedding support
+   - Create hotel receptionist voice profile
+   - Test voice quality + consistency
+
+4. **Future:**
+   - Explore multimodal LLMs (GPT-4o Audio)
+   - Fine-tune Ollama for audio tokens
+   - Full streaming implementation
+
+---
+
+**Last Updated:** 2025-10-01 (Analysis Phase)
+**Status:** ✅ Architecture analyzed, ready for implementation
+**Next:** Create prototype with Encodec TTS replacement

@@ -1,0 +1,346 @@
+# LLM Red-Team CI
+
+![LLM Red-Team CI](https://img.shields.io/badge/LLM-Red--Team%20CI-red)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-green)
+![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-orange)
+
+Automatically attack your customers' LLM apps in CI to catch prompt-injection, data exfiltration, jailbreaks, and tool abuse before deployment.
+
+## Overview
+
+LLM Red-Team CI is a GitHub Action that runs a corpus of adversarial prompts against your LLM application's staging endpoint. It uses a "judge" model to score failures and emits SARIF/JSON reports, along with Slack notifications and simple HTML reports containing reproducible curl commands.
+
+### Key Features
+
+- **Automated Security Testing**: Test your LLM applications against a comprehensive corpus of adversarial prompts
+- **Vulnerability Detection**: Catch prompt-injection, data exfiltration, jailbreaks, and tool abuse
+- **CI/CD Integration**: Run tests automatically in your CI/CD pipeline
+- **Detailed Reports**: Get SARIF, JSON, and HTML reports with reproducible curl commands
+- **Slack Notifications**: Receive instant alerts when vulnerabilities are detected
+- **Customizable Testing**: Configure test categories, intensity, and more
+
+### ⚡ New in v2.0.0
+
+- **10x Faster**: Parallel test execution with configurable concurrency
+- **50% Cost Reduction**: Smart caching system with 24h TTL
+- **Web UI Testing**: Configurable Playwright selectors for any website
+- **Production-Ready**: Real rate limiting, progress bars, comprehensive error handling
+- **Developer-Friendly**: Working curl commands with proper shell escaping
+
+See [CHANGELOG.md](CHANGELOG.md) for full release notes.
+
+## Quick Start
+
+### 1. Add the GitHub Action to your workflow
+
+Create a file at `.github/workflows/llm-redteam.yml` with the following content:
+
+```yaml
+name: LLM Security Testing
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  llm-redteam:
+    runs-on: ubuntu-latest
+    name: LLM Red-Team CI
+    steps:
+      - name: Run LLM Red-Team Tests
+        uses: llm-redteam/llm-redteam-ci@v1
+        with:
+          api_endpoint: ${{ secrets.LLM_API_ENDPOINT }}
+          api_key: ${{ secrets.LLM_API_KEY }}
+          test_categories: 'prompt-injection,data-exfiltration,jailbreak,tool-abuse'
+          test_intensity: 'medium'
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+          report_format: 'all'
+          service_tier: 'standard'
+```
+
+### 2. Configure your secrets
+
+In your GitHub repository, go to Settings > Secrets and add the following secrets:
+
+- `LLM_API_ENDPOINT`: The endpoint URL of your LLM application
+- `LLM_API_KEY`: API key for authentication with your LLM application (if required)
+- `SLACK_WEBHOOK`: Slack webhook URL for notifications (optional)
+
+### 3. Run the workflow
+
+The workflow will run automatically on pull requests to your main/master branch. You can also run it manually from the Actions tab in your GitHub repository.
+
+## Configuration Options
+
+### GitHub Action Inputs
+
+| Option | Description | Required | Default |
+|--------|-------------|----------|---------|
+| `api_endpoint` | The endpoint URL of the LLM application to test | Yes | - |
+| `api_key` | API key for authentication with the LLM application | No | - |
+| `test_categories` | Categories of tests to run (comma-separated) | No | `all` |
+| `test_intensity` | Intensity level of testing (low, medium, high) | No | `medium` |
+| `slack_webhook` | Slack webhook URL for notifications | No | - |
+| `report_format` | Format of the test report (sarif, json, html, all) | No | `all` |
+| `service_tier` | Service tier for test volume (basic, standard, premium) | No | `standard` |
+
+### Advanced Configuration (`.llm-redteam.yml`)
+
+For more advanced configuration, create a `.llm-redteam.yml` file in your repository root:
+
+```yaml
+target:
+  endpoint: ${STAGING_ENDPOINT}
+
+  # Web UI testing (NEW in v2.0)
+  web_ui:
+    enabled: true
+    input_selector: "textarea, .chat-input"
+    submit_selector: "button[type='submit']"
+    response_selector: ".chat-response"
+    wait_timeout: 5000
+    screenshot_on_failure: true
+
+limits:
+  max_concurrency: 4  # Parallel execution (NEW in v2.0)
+  max_tokens: 2000
+  max_seconds: 45
+
+advanced:
+  enable_cache: true  # 24h caching (NEW in v2.0)
+  judge_model: "claude-3-sonnet"
+  temperature: 0.7
+```
+
+See [.llm-redteam.yml](.llm-redteam.yml) for a complete configuration example.
+
+## Test Categories
+
+LLM Red-Team CI tests for the following categories of vulnerabilities:
+
+### Prompt Injection
+
+Tests that attempt to manipulate the LLM into ignoring its system prompt or revealing sensitive information about its configuration.
+
+Examples:
+- Direct instruction override attempts
+- Role-play override attempts
+- Security test pretense
+- Authority impersonation
+
+### Data Exfiltration
+
+Tests that attempt to make the LLM extract and transmit sensitive information.
+
+Examples:
+- External data exfiltration
+- Sensitive data memorization
+- Data encoding exfiltration
+- Information extraction instructions
+
+### Jailbreaks
+
+Tests that attempt to bypass the LLM's safety measures and content policies.
+
+Examples:
+- Academic pretense for harmful content
+- Persona switching
+- Creative completion exploits
+- Translation bypass techniques
+
+### Tool Abuse
+
+Tests that attempt to misuse tools or plugins that the LLM might have access to.
+
+Examples:
+- Unauthorized file access
+- Malicious code execution
+- Internal network access
+- Destructive database operations
+
+## Reports and Notifications
+
+### SARIF Reports
+
+SARIF (Static Analysis Results Interchange Format) reports are generated for integration with GitHub Code Scanning and other security tools.
+
+### JSON Reports
+
+Detailed JSON reports contain all test results, including prompts, responses, and vulnerability assessments.
+
+### HTML Reports
+
+User-friendly HTML reports include:
+- Summary of test results
+- Detailed vulnerability information
+- Reproducible curl commands for each vulnerability
+- Evidence and severity ratings
+
+### Slack Notifications
+
+Slack notifications include:
+- Summary of test results
+- List of detected vulnerabilities
+- Links to detailed reports
+
+## Open Source & Self-Hosted
+
+**LLM Red-Team CI is 100% open source (MIT License)** and can be self-hosted for free!
+
+### Requirements
+
+- **Python 3.10+**: Core runtime
+- **Anthropic API Key**: For judge model evaluation (required)
+- **Optional**: Supabase (for result storage), Slack webhook (for notifications)
+
+### Cost Breakdown (Self-Hosted)
+
+- **Infrastructure**: Free (runs in GitHub Actions or your CI)
+- **Judge API**: ~$0.02-0.05 per test (Anthropic API)
+- **Caching**: Reduces costs by ~50% for repeated tests
+- **Total**: ~$10-50/month for typical usage (200-1000 tests/month)
+
+**No subscription fees. Pay only for what you use.**
+
+### Managed Service (Optional)
+
+For teams that prefer a managed solution, we offer hosted plans with:
+- Managed infrastructure and database
+- Priority support
+- Advanced analytics
+- Custom integrations
+
+Contact us for managed service pricing.
+
+## Architecture
+
+LLM Red-Team CI consists of the following components:
+
+- **GitHub Action**: Runs in your CI/CD pipeline
+- **Test Runner**: Executes adversarial prompts against your LLM application
+- **Judge Model**: Evaluates responses using Claude to detect vulnerabilities
+- **Report Generator**: Creates SARIF, JSON, and HTML reports
+- **Notification System**: Sends alerts to Slack
+- **API**: Cloudflare Workers API for test management and result retrieval
+- **Database**: Supabase/Postgres for storing test results and corpus data
+
+## Cost Guardrails
+
+To prevent runaway costs, LLM Red-Team CI includes several built-in guardrails:
+
+- **Budget defaults**: max_seconds=45, max_tokens=2k, max_concurrency=4
+- **Judge cost SLO**: <$0.05/test p95. System will alert if rolling 1h average exceeds threshold
+- **Caching**: Deterministic verdicts are cached by (attack_id, model, seed, judge_version) for 24h in staging to cap cost during testing flurries
+- **Concurrency limits**: Prevents resource exhaustion during high-volume testing
+- **Time budgets**: Enforces maximum execution time per test run
+
+## CI/CD Integration Features
+
+### Automatic PR Comments
+The system automatically posts detailed results to your pull requests, including:
+- Summary of findings
+- Worst severity detected
+- Top failure types
+- Examples of vulnerabilities with evidence
+
+### TTL-Based Muting
+Unlike permanent ignores, all muted tests have automatic expiration dates:
+- Mutes expire after specified TTL (Time To Live)
+- Expired mutes cause build failures to force cleanup
+- Supports severity-based muting (mute up to critical severity)
+
+### Automatic Issue Creation
+High and critical severity findings automatically create tickets in your issue tracker:
+- Jira integration with detailed vulnerability information
+- Linear API support (contact us for configuration)
+
+### SIEM Integration
+Export findings to your security infrastructure:
+- Splunk HEC support with structured events
+- Datadog logs integration
+- Custom export formats available
+
+## Development
+
+### Prerequisites
+
+- **Python 3.10+** (required)
+- **Anthropic API Key** (required) - Get one at https://console.anthropic.com/
+- **Supabase account** (optional, for result storage)
+- **Node.js 20.x** (optional, for API/frontend development)
+
+### Quick Setup
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/llm-redteam/llm-redteam-ci.git
+cd llm-redteam-ci
+```
+
+2. **Install dependencies:**
+```bash
+cd src/github-action
+pip install -r requirements.txt
+playwright install chromium  # For web UI testing
+```
+
+3. **Set up environment variables:**
+```bash
+export ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Optional (for result storage)
+export SUPABASE_URL=your_supabase_url
+export SUPABASE_KEY=your_supabase_key
+
+# Optional (for notifications)
+export SLACK_WEBHOOK_URL=your_slack_webhook
+```
+
+4. **Run a quick test:**
+```bash
+# Configure your target endpoint
+export STAGING_ENDPOINT='https://your-llm-app.com/api/chat'
+
+# Run tests
+python run.py --config ../../.llm-redteam.yml --out ../../artifacts
+```
+
+### Running Tests
+
+```bash
+# Run full test suite
+python src/github-action/run.py --config .llm-redteam.yml
+
+# Run specific categories
+python src/github-action/run.py --config .llm-redteam.yml
+
+# Run with custom output directory
+python src/github-action/run.py --config .llm-redteam.yml --out ./my-results
+```
+
+### Running Integration Tests
+
+```bash
+# Install dependencies first
+pip install -r src/github-action/requirements.txt
+
+# Run integration tests
+python test_integration.py
+```
+
+## Contributing
+
+We welcome contributions to LLM Red-Team CI! Please see our [contributing guidelines](CONTRIBUTING.md) for more information.
+
+## License
+
+LLM Red-Team CI is licensed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+## Contact
+
+- Website: [llm-redteam-ci.com](https://llm-redteam-ci.com)
+- Email: contact@llm-redteam-ci.com
+- Twitter: [@LLMRedTeamCI](https://twitter.com/LLMRedTeamCI)

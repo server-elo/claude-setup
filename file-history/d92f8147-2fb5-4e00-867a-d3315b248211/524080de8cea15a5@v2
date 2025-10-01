@@ -1,0 +1,43 @@
+# Open Source Model Configuration
+# Use local models: llama3, mistral, phi-3, qwen, etc.
+TARGET_MODEL=llama3:8b
+RED_TEAM_MODEL=mistral:7b
+STRATEGY_MODEL=qwen2:7b
+
+# Ollama Configuration (local inference)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_TIMEOUT=300
+
+# HuggingFace Models (alternative)
+HF_TARGET_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+HF_REDTEAM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
+HF_CACHE_DIR=./models/huggingface
+
+# Framework Settings
+MAX_ITERATIONS=3
+MEMORY_BUFFER_SIZE=100
+ATTACK_SUCCESS_THRESHOLD=0.8
+MAX_QUERIES_PER_ATTACK=5
+NUM_PARALLEL_AGENTS=4
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FILE=logs/redteam.log
+
+# MITRE ATT&CK Configuration
+MITRE_ATTACK_VERSION=14.1
+MITRE_DATA_PATH=data/mitre_attack/
+
+# Persona Configuration
+PERSONA_TYPES=expert,regular_user,researcher,developer,security_analyst
+MAX_PERSONAS_PER_SEED=5
+DYNAMIC_PERSONA_GENERATION=true
+
+# Vector Store
+VECTOR_STORE_TYPE=chroma
+VECTOR_STORE_PATH=./data/vectorstore
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+# Attack Memory
+ATTACK_MEMORY_PATH=./data/attack_memory
+STRATEGY_MEMORY_PATH=./data/strategy_memory

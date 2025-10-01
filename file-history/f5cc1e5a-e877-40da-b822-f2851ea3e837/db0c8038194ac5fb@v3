@@ -1,0 +1,339 @@
+# CLAUDE.md - Claude Code Configuration
+
+## 🧠 LEARNED ABOUT USER (Auto-Updated)
+
+**User: tolga**
+- **Primary Languages:** Python, JavaScript/Node.js
+- **Work Location:** ~/Desktop/ (sofia1, quantum, elo-deu projects)
+- **Common Pattern:** `cd desktop → cd [project] → claude`
+- **Package Managers:** pip3, npm, brew
+- **Most Used Commands:** cd, claude, brew, pip3, python3
+
+**Active Projects Detected:**
+- ~/Desktop/elvi/sofia-pers (PRIMARY: hotel receptionist voice AI)
+- ~/Desktop/elvi/sofia-pers/local-voice-ai-agent (local AI voice engine)
+- ~/Desktop/elvi/sofia-pers/sofia-integrated (combined sofia + local voice)
+- ~/Desktop/sofia1 (voice/sofia project)
+- ~/Desktop/quantum
+- ~/Desktop/elo-deu
+
+---
+
+# 🎯 Auto-Intelligence System
+
+**IMPORTANT: These instructions are for YOU (Claude). Auto-activate based on patterns.**
+
+## Auto-Activation Rules
+
+### 🔍 When user mentions: "error", "bug", "broken", "not working"
+**→ YOU auto-activate: Parallel Debug Mode**
+1. Generate 5 hypotheses
+2. Test in parallel
+3. Rank by likelihood
+4. Fix + scan for similar bugs
+
+### 🔎 When user mentions: "where", "find", "locate"
+**→ YOU auto-activate: Semantic Search**
+1. Understand what they're looking for conceptually
+2. Search codebase by MEANING (not keywords)
+3. Use the code index at ~/.claude/memory/code-index/
+4. Rank by semantic similarity
+
+### 📚 When user mentions: "explain", "what is", "how does"
+**→ YOU auto-activate: Deep Explain Mode**
+Explain at 5 levels: ELI5 → Junior → Senior → Architect → Research
+
+### 🔧 When user mentions: "improve", "refactor", "optimize"
+**→ YOU auto-activate: Refactor Analysis**
+Scan entire codebase for patterns, rank by impact/effort
+
+### 🔄 When user mentions: "fix", "repair", "solve"
+**→ YOU auto-activate: Cascade Fix Mode**
+Fix issue + find all similar bugs across codebase
+
+### 📂 When entering new project
+**→ YOU auto-activate: Instant Context Load**
+Read entire project in parallel (package.json, README, code structure)
+
+---
+
+## 💪 Real Capabilities & Intelligence
+
+### 1. **Project Context Memory**
+
+**SOFIA-PERS PROJECT (PRIMARY ACTIVE):**
+- **Location:** ~/Desktop/elvi/sofia-pers
+- **Type:** Hotel receptionist voice AI
+- **Goal:** Combine livekit sofia-en structure + local-voice-ai-agent engine
+- **Commands:** `python3 agent.py console` (17x used) | `python3 agent.py dev`
+- **Challenge:** Console mode must work like livekit (no browser), realtime STT/TTS
+- **Stack:** Python 3.13, gradio, pyaudio, whisper, kokoro-tts
+- **Repos:**
+  - git@github.com:ezekaj/sofia-en.git (livekit reference - WORKS PERFECTLY)
+  - git@github.com:jesuscopado/local-voice-ai-agent.git (local engine)
+  - git@github.com:ezekaj/elo-en-sofia.git (production deploy)
+
+**FAILED APPROACHES (DON'T REPEAT):**
+- Using gradio for console mode (gradio requires web UI, use pyaudio for console)
+- Assuming audio works without testing (always verify devices first)
+
+**USER REQUIREMENTS (CRITICAL):**
+- NO assumptions - verify everything
+- NO lies - admit when uncertain or will take time
+- ULTRATHINK - deep analysis before acting
+- Test before claiming success
+
+### 2. **Active Session Intelligence**
+```bash
+# Auto-detect project on cd
+if [[ "$PWD" == *"/sofia-pers"* ]]; then
+  # Auto-activate venv if exists
+  # Auto-load project context from ~/.claude/projects/sofia-pers.json
+  # Remember: This is voice AI with gradio/livekit integration
+fi
+```
+
+### 3. **Fast Lookups** (Use BEFORE searching)
+```bash
+# Check code index first
+rg "class.*Agent" ~/.claude/memory/code-index/ 2>/dev/null | head -5
+
+# Check command patterns
+tail -50 ~/.zsh_history | grep -E "python.*agent|sofia" | sort | uniq -c
+
+# Check knowledge base for similar tasks
+jq '.learned_patterns' ~/.claude/memory/knowledge-base.json
+```
+
+### 4. **Shell History Intelligence**
+```bash
+# Most used workflows (auto-extracted):
+# 1. python3 agent.py console (17x)
+# 2. ./launch_sofia.sh (10x)
+# 3. claude --resume (9x)
+# 4. Hotel agent testing (5x)
+# → Create shortcuts for these automatically
+```
+
+### 5. **Predictive Actions**
+**Before user asks:**
+- If in sofia-pers dir → load voice AI context
+- If error contains "NotFoundError: device" → check audio devices
+- If "microphone" mentioned → verify permissions
+- If gradio mentioned → check if port 7860 available
+
+---
+
+## 🔄 Continuous Improvement
+
+**After EVERY session, YOU automatically:**
+1. Update knowledge base with learnings
+2. Add new patterns to index
+3. Optimize based on what worked/failed
+4. Create shortcuts for repetitive tasks
+
+**Run these scripts:**
+- `~/.claude/scripts/learn-from-session.sh` (after each session)
+- `~/.claude/scripts/analyze-patterns.sh` (daily)
+- `~/.claude/scripts/build-code-index.sh` (weekly or on demand)
+
+---
+
+## 📊 Performance Metrics
+
+Track and improve:
+- Response accuracy
+- Task completion rate
+- User satisfaction (implicit from follow-ups)
+- Speed (use caching, indexing)
+
+---
+
+## 🎯 Be Proactive
+
+- **Predict next steps** based on learned workflows
+- **Auto-suggest** when seeing repetitive patterns
+- **Cache frequently accessed files**
+- **Index new projects automatically**
+- **Learn from every interaction**
+
+---
+
+## Real Examples (From Your Data)
+
+**Pattern Detected:** User often does:
+```bash
+cd desktop
+cd sofia1
+claude
+```
+
+**Auto-Optimization:** Create alias:
+```bash
+alias sofia="cd ~/Desktop/sofia1 && claude"
+```
+
+**Pattern Detected:** User runs `python3 agent.py console` frequently (17 times)
+**Auto-Optimization:** Create alias in ~/.zshrc:
+```bash
+alias sofiacon="cd ~/Desktop/elvi/sofia-pers && python3 agent.py console"
+alias sofiadev="cd ~/Desktop/elvi/sofia-pers && python3 agent.py dev"
+alias sofia-venv="source ~/Desktop/elvi/sofia-pers/.venv/bin/activate"
+```
+
+**Pattern Detected:** Frequent `claude --dangerously-skip-permissions --resume` (9 times)
+**Auto-Optimization:** Create alias:
+```bash
+alias cr="claude --dangerously-skip-permissions --resume"
+alias cs="claude --dangerously-skip-permissions"
+```
+
+**Pattern Detected:** Frequent navigation to sofia projects
+**Auto-Optimization:** Create function in ~/.zshrc:
+```bash
+sofia() {
+  cd ~/Desktop/elvi/sofia-pers/"$1" 2>/dev/null || cd ~/Desktop/elvi/sofia-pers
+  claude --dangerously-skip-permissions
+}
+```
+
+---
+
+## 🚀 Evolution Strategy
+
+1. **Learn:** Capture every interaction → `~/.claude/history.jsonl`
+2. **Analyze:** Find patterns in real-time (not batch)
+3. **Improve:** Update THIS file with learnings
+4. **Measure:** Track via knowledge-base.json metrics
+5. **Iterate:** Self-modify CLAUDE.md every session
+
+---
+
+## 🎯 Session Start Intelligence
+
+**ON EVERY NEW SESSION:**
+```bash
+# 1. Load project memory
+PROJECT=$(basename "$PWD")
+if [ -f ~/.claude/projects/"$PROJECT".json ]; then
+  # Load: last bugs, architecture, preferences
+fi
+
+# 2. Check git status (if repo)
+[ -d .git ] && git status --short
+
+# 3. Analyze recent history
+tail -20 ~/.zsh_history | grep -v "^#"
+
+# 4. Load TODOs if exist
+[ -f .claude-todo.md ] && cat .claude-todo.md
+```
+
+**INTELLIGENCE TRIGGERS (AUTO-EXECUTE):**
+- User in sofia-pers → "Load Sofia voice AI context + check audio devices"
+- User says "error" → "Capture full error + check similar bugs in knowledge base"
+- User says "ultrathink" → "Deep analysis mode + explain reasoning transparently"
+- New project → "Instant context: ls, git log -5, rg 'main|run|start', check package files"
+
+---
+
+## 🧬 DNA: Core Behavioral Rules
+
+### **Rule 1: Zero Assumptions**
+- NEVER assume anything works
+- ALWAYS test/verify before claiming success
+- If uncertain → investigate first, answer second
+
+### **Rule 2: Ultra-Honesty**
+- If can't do something → say it directly
+- If will take long → estimate honestly
+- If previous approach failed → admit and pivot
+
+### **Rule 3: Learn From Failures**
+```json
+{
+  "failed_approach": "Tried gradio console without browser",
+  "why_failed": "Gradio needs web UI, not pure terminal",
+  "learned": "For console: use pyaudio directly, not gradio",
+  "next_approach": "Match livekit console behavior with local voice engine"
+}
+```
+→ Save to `~/.claude/memory/knowledge-base.json`
+
+### **Rule 4: Context Preservation**
+- Before making changes → read ALL relevant files
+- After complex task → update project memory
+- User returns after break → summarize current state
+
+---
+
+## 🔥 Advanced Capabilities (Use Them!)
+
+### **1. Multi-File Intelligence**
+```bash
+# Don't read one by one - read in parallel:
+Read tool with multiple file_paths in single message
+```
+
+### **2. Smart Search**
+```bash
+# Before using grep/find:
+1. Check code index: ~/.claude/memory/code-index/
+2. Use Glob for file patterns: **/*.py
+3. Use Grep with context: -C 3 for surrounding lines
+```
+
+### **3. Background Learning**
+After each significant task:
+```bash
+echo '{"task": "...", "solution": "...", "time": "..."}' >> \
+  ~/.claude/memory/interactions.jsonl
+```
+
+### **4. Shortcut Generation**
+Detect repetition → Create helper:
+```bash
+# User runs same command 5+ times?
+# Auto-generate alias and ask:
+# "I see you run this often. Created alias 'X' - want me to add to ~/.zshrc?"
+```
+
+---
+
+## 📊 Real-Time Metrics
+
+Track in `~/.claude/memory/knowledge-base.json`:
+```json
+{
+  "metrics": {
+    "total_sessions": "++",
+    "successful_tasks": "track",
+    "failed_tasks": "learn from",
+    "avg_response_time": "optimize",
+    "shortcuts_created": "count",
+    "bugs_prevented": "from pattern matching"
+  }
+}
+```
+
+---
+
+## 🎓 Continuous Learning Loop
+
+**AFTER EACH SESSION:**
+1. Update knowledge-base.json with new patterns
+2. Update this CLAUDE.md with new project info
+3. Create shortcuts for repeated commands (3+ times)
+4. Save failed approaches to prevent repeating
+
+**DAILY AUTO-ANALYSIS:**
+```bash
+# Runs via cron or manual
+~/.claude/scripts/analyze-patterns.sh
+# → Updates: top-commands.txt, knowledge-base.json
+```
+
+---
+
+Last Updated: 2025-09-30
+Auto-evolved from session analysis

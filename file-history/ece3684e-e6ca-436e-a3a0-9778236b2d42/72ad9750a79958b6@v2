@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""
+Generate German female receptionist voice sample
+For use with M3 voice cloning
+"""
+import asyncio
+import edge_tts
+
+async def generate_voice_sample():
+    """Generate hotel receptionist voice sample"""
+
+    # Text for hotel receptionist (10 seconds worth)
+    text = """Guten Tag und herzlich willkommen im Hotel.
+    Mein Name ist Sofia, ich bin Ihre Rezeptionistin.
+    Wie kann ich Ihnen heute helfen?
+    Ich freue mich, Sie bei uns begrüßen zu dürfen."""
+
+    # Use German female voice (Katja - friendly, professional)
+    voice = "de-DE-KatjaNeural"
+
+    print(f"Generating voice sample...")
+    print(f"Voice: {voice}")
+    print(f"Text: {text}")
+
+    # Generate audio
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save("receptionist_voice_katja.wav")
+
+    print(f"\n✅ Voice sample generated: receptionist_voice_katja.wav")
+    print(f"   Duration: ~10 seconds")
+    print(f"   Voice: German female (Katja - professional)")
+    print(f"\n   Use this for M3 voice cloning!")
+
+if __name__ == "__main__":
+    asyncio.run(generate_voice_sample())

@@ -1,0 +1,9 @@
+{
+  "memories": {
+    "last_bug": "IndexError in calculate_total"
+  },
+  "expertise": [
+    "Python errors",
+    "Environment issues"
+  ]
+}

@@ -1,0 +1,144 @@
+# Sofia Hotel Receptionist - Production Voice Agent
+
+## 🏨 Professional Hotel Front Desk AI
+
+Sofia is a **voice-only hotel receptionist** powered by local AI technology. Perfect for hotel front desks, guest services, and reception areas.
+
+### ✨ Key Features
+- **🎤 Voice-Only Interface** - No text input, pure voice interaction
+- **🔒 Private & Secure** - Runs entirely on local hardware
+- **🏨 Hotel Specialized** - 50+ booking and service tools
+- **🌍 Professional** - Natural hospitality responses
+- **⚡ Real-Time** - Instant voice processing and responses
+
+### 🔧 Technology Stack
+- **Speech Recognition:** Moonshine STT (State-of-the-art)
+- **Voice Synthesis:** Kokoro TTS (Natural human-like voice)
+- **AI Brain:** Ollama Gemma3 4B (Local LLM)
+- **Voice Processing:** FastRTC (Real-time audio)
+
+## 🚀 Quick Start
+
+### Requirements
+- Microphone for guest voice input
+- Speakers for Sofia's voice output
+- Local voice AI environment (already configured)
+
+### Launch Sofia Receptionist
+
+**Option 1: Pure Console Mode (Recommended for Production)**
+```bash
+cd /Users/tolga/Desktop/elvi/sofia-pers/sofia-hotel/agents/hotel
+/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python sofia_hotel_receptionist.py receptionist
+```
+- Direct microphone/speaker interaction
+- No browser required
+- Perfect for hotel front desk kiosk
+
+**Option 2: Web Interface Mode (For Testing/Monitoring)**
+```bash
+cd /Users/tolga/Desktop/elvi/sofia-pers/sofia-hotel/agents/hotel
+/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python sofia_hotel_web.py receptionist
+```
+- Opens in browser with visual interface
+- Shows conversation in real-time
+- Good for staff monitoring
+
+### Expected Output
+```
+============================================================
+SOFIA HOTEL RECEPTIONIST - VOICE-ONLY MODE
+PRODUCTION HOTEL FRONT DESK AGENT
+============================================================
+Voice-only mode - Professional hotel receptionist
+No text input - Pure voice interaction for hotel use
+============================================================
+
+Voice System: Local AI Stack (Private & Secure)
+Speech Recognition: Moonshine STT
+Voice Synthesis: Kokoro TTS
+AI Brain: Ollama Gemma3 4B
+Hotel Functions: 50+ booking and service tools
+============================================================
+
+🎤 VOICE-ONLY MODE - No keyboard input required
+⏸️  Press Ctrl+C to shutdown receptionist
+
+!!! SOFIA HOTEL ENTRYPOINT TRIGGERED !!!
+!!! LOCAL VOICE AI (FastRTC + Moonshine + Kokoro + Ollama) !!!
+
+✅ Voice stream active - Sofia is listening continuously!
+(Just like LiveKit - speak naturally anytime)
+```
+
+## 🎯 How It Works
+
+1. **Guest speaks** to Sofia (microphone required)
+2. **Moonshine STT** converts speech to text
+3. **Gemma3 4B** processes request using hotel tools
+4. **Kokoro TTS** converts response to natural voice
+5. **Sofia speaks** back to guest (speakers required)
+
+## 🏨 Hotel Capabilities
+
+Sofia can handle all standard hotel reception tasks:
+
+### 🛏️ Room Bookings
+- Check room availability
+- Make reservations
+- Room upgrades and modifications
+- Pricing information
+
+### 🧘 Wellness Services
+- Spa appointments
+- Wellness Tower bookings
+- Treatment information
+- Availability checking
+
+### 🍽️ Dining Services
+- Restaurant reservations
+- Menu information
+- Dietary requirements
+- Special occasions
+
+### 🏔️ Local Information
+- Tourist attractions
+- Weather information
+- Transportation
+- Local recommendations
+
+### 🚨 Emergency Support
+- Emergency escalation
+- Staff notification
+- Priority handling
+- Guest assistance
+
+## 🔒 Privacy & Security
+
+- **100% Local Processing** - No data sent to cloud services
+- **Private Conversations** - All voice processing on-premises
+- **Secure Storage** - Guest information stored locally
+- **No Internet Required** - Works completely offline
+
+## 🛠️ Maintenance
+
+### Health Checks
+- Sofia shows "ENTRYPOINT TRIGGERED" when healthy
+- Voice models load automatically
+- Continuous audio monitoring active
+
+### Troubleshooting
+- **No Voice:** Check microphone permissions and connection
+- **No Audio:** Verify speaker output and volume
+- **Not Responding:** Restart with Ctrl+C and relaunch
+
+## 📞 Support
+
+For technical support or customization:
+- Check system logs for error messages
+- Verify microphone and speaker connections
+- Ensure local AI models are properly loaded
+
+---
+
+**Sofia Hotel Receptionist** - Your professional voice-only hotel front desk assistant! 🏨✨

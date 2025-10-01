@@ -1,0 +1,58 @@
+"""Configuration management for the red team framework."""
+
+from typing import Optional, List
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class RedTeamConfig(BaseSettings):
+    """Main configuration for the red team framework."""
+
+    # Model Configuration (Open Source)
+    target_model: str = Field(default="llama3:8b", description="Target model to test")
+    red_team_model: str = Field(default="mistral:7b", description="Red team attack model")
+    strategy_model: str = Field(default="qwen2:7b", description="Strategy proposer model")
+
+    # Ollama Configuration
+    ollama_base_url: str = Field(default="http://localhost:11434")
+    ollama_timeout: int = Field(default=300)
+
+    # HuggingFace Alternatives
+    hf_target_model: Optional[str] = Field(default="meta-llama/Meta-Llama-3-8B-Instruct")
+    hf_redteam_model: Optional[str] = Field(default="mistralai/Mistral-7B-Instruct-v0.2")
+    hf_cache_dir: str = Field(default="./models/huggingface")
+
+    # Framework Settings
+    max_iterations: int = Field(default=3, description="SEAS iterations")
+    memory_buffer_size: int = Field(default=100, description="RedAgent memory size")
+    attack_success_threshold: float = Field(default=0.8)
+    max_queries_per_attack: int = Field(default=5, description="RedAgent max queries")
+    num_parallel_agents: int = Field(default=4)
+
+    # Logging
+    log_level: str = Field(default="INFO")
+    log_file: str = Field(default="logs/redteam.log")
+
+    # MITRE ATT&CK
+    mitre_attack_version: str = Field(default="14.1")
+    mitre_data_path: str = Field(default="data/mitre_attack/")
+
+    # Persona Configuration (PersonaTeaming)
+    persona_types: List[str] = Field(
+        default=["expert", "regular_user", "researcher", "developer", "security_analyst"]
+    )
+    max_personas_per_seed: int = Field(default=5)
+    dynamic_persona_generation: bool = Field(default=True)
+
+    # Vector Store
+    vector_store_type: str = Field(default="chroma")
+    vector_store_path: str = Field(default="./data/vectorstore")
+    embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+
+    # Memory Paths
+    attack_memory_path: str = Field(default="./data/attack_memory")
+    strategy_memory_path: str = Field(default="./data/strategy_memory")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"

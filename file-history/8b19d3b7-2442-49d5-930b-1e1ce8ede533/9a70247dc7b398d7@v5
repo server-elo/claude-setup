@@ -1,0 +1,421 @@
+#!/usr/bin/env -S ../../../local-voice-ai-agent/.venv/bin/python
+"""
+Sofia Hotel Receptionist - Real-Time Console Voice (No Browser!)
+
+True console-only mode with continuous real-time voice like original LiveKit.
+Uses PyAudio + WebRTC VAD with proper audio device management.
+"""
+
+import sys
+import os
+import uuid
+import re
+import logging
+from datetime import datetime
+import json
+import pyaudio
+import numpy as np
+import webrtcvad
+import collections
+import soundfile as sf
+import tempfile
+import subprocess
+import threading
+import queue
+import time
+
+# Add project root to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Initialize logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S,%f'
+)
+
+# Import voice components
+try:
+    from fastrtc import get_stt_model, get_tts_model
+    VOICE_AVAILABLE = True
+except ImportError:
+    VOICE_AVAILABLE = False
+    print("❌ FastRTC not available")
+    sys.exit(1)
+
+import ollama
+
+# Import hotel functionality
+from prompts.hotel.agent_instructions import AGENT_INSTRUCTION
+
+# Create loggers
+logger = logging.getLogger("agents.hotel.hotel_agent")
+escalation_logger = logging.getLogger("core.escalation.escalation_triggers")
+
+def log_json_message(level, message, **kwargs):
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "level": level,
+        "message": message,
+        **kwargs
+    }
+    logger.info(json.dumps(log_data))
+
+def register_escalation_trigger(trigger_id, escalation_type, priority):
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "level": "INFO",
+        "message": "Escalation trigger registered",
+        "trigger_id": trigger_id,
+        "escalation_type": escalation_type,
+        "priority": priority
+    }
+    print(json.dumps(log_data))
+    escalation_logger.info(json.dumps(log_data))
+
+class SofiaRealtimeConsole:
+    """Real-time console voice receptionist - like a phone call"""
+
+    def __init__(self):
+        # Initialize escalation triggers
+        self._register_all_escalation_triggers()
+
+        print("🏨 Starting Sofia Hotel AI Concierge...")
+        print()
+
+        # Initialize voice models
+        print("🔄 Loading voice models...")
+        self.tts_model = get_tts_model()
+        self.stt_model = get_stt_model()
+        print("✅ Voice models loaded")
+
+        # Audio settings
+        self.RATE = 16000
+        self.CHUNK = 320  # 20ms frames for WebRTC VAD
+        self.CHANNELS = 1
+        self.FORMAT = pyaudio.paInt16
+
+        # VAD for speech detection
+        self.vad = webrtcvad.Vad(2)  # Aggressiveness: 0-3 (2 = moderate)
+
+        # Conversation state
+        self.conversation_history = []
+        self.conversation_id = None
+        self.is_running = True
+
+        # Threading for audio
+        self.audio_queue = queue.Queue()
+        self.should_stop = threading.Event()
+
+    def _register_all_escalation_triggers(self):
+        triggers = [
+            ("emergency_keywords", "security_concern", 100),
+            ("complaint_keywords", "guest_complaint", 80),
+            ("vip_indicators", "vip_guest", 75),
+            ("payment_issues", "payment_issue", 70),
+            ("system_errors", "system_failure", 90),
+            ("booking_conflicts", "booking_conflict", 60),
+            ("technical_issues", "technical_error", 50),
+            ("maintenance_requests", "maintenance_request", 30),
+            ("repeated_failures", "technical_error", 85),
+            ("long_conversation", "unknown_request", 40),
+            ("policy_exceptions", "policy_exception", 45),
+        ]
+        for trigger_id, escalation_type, priority in triggers:
+            register_escalation_trigger(trigger_id, escalation_type, priority)
+
+    def humanize_text_for_speech(self, text: str) -> str:
+        emoji_pattern = re.compile(
+            "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"
+            "\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U000024C2-\U0001F251"
+            "\U0001F900-\U0001F9FF\U0001FA70-\U0001FAFF]+", flags=re.UNICODE
+        )
+        text = emoji_pattern.sub(' ', text)
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        text = re.sub(r'\*(.*?)\*', r'\1', text)
+        text = re.sub(r'`(.*?)`', r'\1', text)
+        text = re.sub(r'#{1,6}\s*', '', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+    def get_hotel_ai_response(self, user_message: str) -> str:
+        try:
+            messages = [
+                {"role": "system", "content": AGENT_INSTRUCTION},
+                {"role": "assistant", "content": "Hello! I'm Sofia, your hotel concierge. How may I assist you today?"}
+            ]
+
+            for msg in self.conversation_history[-6:]:
+                if msg.startswith("Guest: "):
+                    messages.append({"role": "user", "content": msg[7:]})
+                elif msg.startswith("Sofia: "):
+                    messages.append({"role": "assistant", "content": msg[7:]})
+
+            messages.append({"role": "user", "content": user_message})
+
+            response = ollama.chat(
+                model='gemma3:4b',
+                messages=messages,
+                options={'temperature': 0.7}
+            )
+
+            return response['message']['content']
+
+        except Exception as e:
+            logger.error(f"AI error: {e}")
+            return "I apologize, I'm experiencing some technical difficulties. How else may I help you with your hotel needs?"
+
+    def play_tts_separate_process(self, text: str):
+        """Play TTS in separate process to avoid device conflicts"""
+        clean_text = self.humanize_text_for_speech(text)
+        audio_chunks = []
+        sample_rate = None
+
+        for chunk in self.tts_model.stream_tts_sync(clean_text):
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                rate, audio_data = chunk
+                if sample_rate is None:
+                    sample_rate = rate
+                audio_chunks.append(audio_data)
+
+        if audio_chunks:
+            full_audio = np.concatenate(audio_chunks) if len(audio_chunks) > 1 else audio_chunks[0]
+            if sample_rate is None:
+                sample_rate = 22050
+
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                sf.write(tmp_file.name, full_audio, sample_rate)
+                # Play in subprocess to avoid blocking PyAudio
+                subprocess.run(['afplay', tmp_file.name], capture_output=True)
+                os.unlink(tmp_file.name)
+
+            # Give audio device time to release
+            time.sleep(0.3)
+
+    def audio_input_callback(self, in_data, frame_count, time_info, status):
+        """Continuous audio input callback"""
+        self.audio_queue.put(in_data)
+        return (None, pyaudio.paContinue)
+
+    def process_speech_continuously(self):
+        """Continuous speech detection and processing in separate thread"""
+        ring_buffer = collections.deque(maxlen=30)  # ~600ms buffer
+        triggered = False
+        voiced_frames = []
+
+        while not self.should_stop.is_set():
+            try:
+                # Get audio data from queue
+                if self.audio_queue.empty():
+                    time.sleep(0.01)
+                    continue
+
+                frame = self.audio_queue.get_nowait()
+
+                # Voice activity detection
+                is_speech = self.vad.is_speech(frame, self.RATE)
+                ring_buffer.append((frame, is_speech))
+
+                if not triggered:
+                    # Check if we should start recording
+                    num_voiced = len([f for f, speech in ring_buffer if speech])
+                    if num_voiced > 0.8 * ring_buffer.maxlen:
+                        print("🎙️ Listening...")
+                        triggered = True
+                        voiced_frames.extend([f for f, s in ring_buffer])
+                        ring_buffer.clear()
+                else:
+                    # We're recording, add the frame
+                    voiced_frames.append(frame)
+                    ring_buffer.append((frame, is_speech))
+
+                    # Check if we should stop recording
+                    num_unvoiced = len([f for f, speech in ring_buffer if not speech])
+                    if num_unvoiced > 0.8 * ring_buffer.maxlen:
+                        print("🔄 Processing...")
+
+                        # Process the complete speech
+                        if voiced_frames:
+                            audio_data = b''.join(voiced_frames)
+                            # Keep as int16 - don't convert to float32
+                            audio_array = np.frombuffer(audio_data, dtype=np.int16)
+
+                            duration = len(audio_array) / self.RATE
+                            print(f"📊 Audio captured: {len(audio_array)} samples, {duration:.2f} seconds")
+
+                            # Skip if too short (less than 0.5 seconds)
+                            if duration < 0.5:
+                                print("⚠️  Audio too short, skipping")
+                                triggered = False
+                                voiced_frames = []
+                                ring_buffer.clear()
+                                continue
+
+                            # Transcribe
+                            print("🔄 Sending to STT model...")
+                            try:
+                                stt_result = self.stt_model.stt((self.RATE, audio_array))
+                                print(f"✅ STT returned: '{stt_result}'")
+
+                                if isinstance(stt_result, tuple):
+                                    transcript = stt_result[0] if stt_result else ""
+                                else:
+                                    transcript = stt_result
+                            except Exception as e:
+                                print(f"❌ STT error: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                transcript = ""
+
+                            print(f"📝 Transcript: '{transcript}'")
+
+                            if transcript and transcript.strip():
+                                transcript = transcript.strip()
+                                print(f"\n👂 Guest said: {transcript}")
+
+                                # Check for exit
+                                if transcript.lower() in ['goodbye', 'exit', 'quit', 'stop']:
+                                    farewell = "Thank you for visiting Hotel Lärchenhof. Auf Wiedersehen!"
+                                    print(f"🏨 Sofia: {farewell}")
+                                    self.play_tts_separate_process(farewell)
+                                    self.is_running = False
+                                    self.should_stop.set()
+                                    break
+
+                                # Get response
+                                self.conversation_history.append(f"Guest: {transcript}")
+                                print("🤔 Sofia is thinking...")
+
+                                ai_response = self.get_hotel_ai_response(transcript)
+                                humanized_response = self.humanize_text_for_speech(ai_response)
+
+                                print(f"🏨 Sofia: {humanized_response}")
+                                self.conversation_history.append(f"Sofia: {humanized_response}")
+
+                                print("🔊 Sofia speaking...")
+                                self.play_tts_separate_process(humanized_response)
+                                print("✅ Ready for next request\n")
+
+                        # Reset for next speech
+                        triggered = False
+                        voiced_frames = []
+                        ring_buffer.clear()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"Speech processing error: {e}")
+                import traceback
+                traceback.print_exc()
+
+    def run_continuous_voice(self):
+        """Main continuous voice loop"""
+        # Play greeting FIRST before starting audio stream
+        greeting = "Guten Tag! Welcome to Hotel Lärchenhof. I'm Sofia, your personal concierge. How may I help you today?"
+        print(f"🏨 Sofia: {greeting}")
+        print("🔊 Sofia speaking...")
+        self.play_tts_separate_process(greeting)
+        print("✅ Greeting completed\n")
+
+        print("==========================================================")
+        print("     🎤 REAL-TIME CONSOLE VOICE MODE (NO BROWSER!)")
+        print("==========================================================")
+        print("🗣️  Speak naturally - Sofia listens continuously")
+        print("⏸️  Sofia responds when you pause speaking")
+        print("🚪 Say 'goodbye' to exit\n")
+
+        # Initialize PyAudio
+        audio = pyaudio.PyAudio()
+
+        try:
+            # Open continuous input stream with callback
+            stream = audio.open(
+                format=self.FORMAT,
+                channels=self.CHANNELS,
+                rate=self.RATE,
+                input=True,
+                frames_per_buffer=self.CHUNK,
+                stream_callback=self.audio_input_callback
+            )
+
+            # Start speech processing thread
+            processing_thread = threading.Thread(target=self.process_speech_continuously)
+            processing_thread.start()
+
+            # Start the stream
+            stream.start_stream()
+            print("🎙️ Listening continuously...\n")
+
+            # Keep running until stopped
+            while self.is_running and stream.is_active():
+                time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            print("\n\n👋 Session interrupted by user")
+            self.is_running = False
+            self.should_stop.set()
+
+        finally:
+            # Cleanup
+            self.should_stop.set()
+            if 'stream' in locals():
+                stream.stop_stream()
+                stream.close()
+            if 'processing_thread' in locals():
+                processing_thread.join(timeout=2)
+            audio.terminate()
+            print("\n✅ Sofia Hotel Receptionist session ended")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "receptionist":
+        print("============================================================")
+        print("SOFIA HOTEL RECEPTIONIST - REAL-TIME CONSOLE MODE")
+        print("NO BROWSER - PURE VOICE LIKE ORIGINAL LIVEKIT")
+        print("============================================================")
+        print("Real-time continuous voice - just like a phone call")
+        print("Professional hotel receptionist for front desk")
+        print("============================================================\n")
+
+        print("Voice System: Local AI Stack (Private & Secure)")
+        print("Speech Recognition: Moonshine STT (Real-time)")
+        print("Voice Synthesis: Kokoro TTS")
+        print("AI Brain: Ollama Gemma3 4B")
+        print("Voice Detection: WebRTC VAD")
+        print("============================================================\n")
+
+        try:
+            sofia = SofiaRealtimeConsole()
+
+            conversation_id = f"hotel_console_{uuid.uuid4().hex[:8]}"
+            sofia.conversation_id = conversation_id
+
+            log_json_message("INFO", "New hotel conversation initialized",
+                            conversation_id=conversation_id)
+            print(f"Conversation ID: {conversation_id}\n")
+
+            # Run continuous voice loop
+            sofia.run_continuous_voice()
+
+            print("\n✅ Sofia Hotel Receptionist session ended")
+            print("👋 Thank you for using Sofia!")
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    else:
+        print("\n============================================================")
+        print("SOFIA HOTEL RECEPTIONIST - REAL-TIME CONSOLE MODE")
+        print("============================================================")
+        print("🏨 Voice-Only Receptionist (No Browser!)")
+        print("🎤 Continuous real-time voice like original LiveKit")
+        print("🔒 Local AI - Private and secure\n")
+        print("USAGE:")
+        print("python sofia_realtime_console.py receptionist\n")
+        print("============================================================")
+
+
+if __name__ == "__main__":
+    main()

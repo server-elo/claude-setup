@@ -1,0 +1,38 @@
+#!/bin/bash
+#
+# Sofia Hotel Receptionist - Easy Launcher
+#
+# Usage:
+#   ./start_sofia.sh          # Launch production console mode
+#   ./start_sofia.sh web      # Launch web interface mode
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PYTHON="/Users/tolga/Desktop/elvi/sofia-pers/local-voice-ai-agent/.venv/bin/python"
+
+echo "============================================================"
+echo "         Sofia Hotel Receptionist - Launcher"
+echo "============================================================"
+echo ""
+
+# Check if virtual environment Python exists
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo "❌ Error: Python virtual environment not found"
+    echo "Expected: $VENV_PYTHON"
+    exit 1
+fi
+
+# Check which mode to launch
+if [ "$1" = "web" ]; then
+    echo "🌐 Launching Web Interface Mode..."
+    echo "   (Browser will open with visual interface)"
+    echo ""
+    cd "$SCRIPT_DIR"
+    exec "$VENV_PYTHON" sofia_hotel_web.py receptionist
+else
+    echo "🎤 Launching Pure Console Mode..."
+    echo "   (Direct microphone/speaker - No browser)"
+    echo ""
+    cd "$SCRIPT_DIR"
+    exec "$VENV_PYTHON" sofia_hotel_receptionist.py receptionist
+fi

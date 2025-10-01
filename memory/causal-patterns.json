@@ -1,0 +1,25 @@
+{
+  "patterns": [
+    {
+      "action": "pip install without venv",
+      "effect": "ModuleNotFoundError",
+      "confidence": 0.7,
+      "occurrences": 1,
+      "timestamp": "2025-09-30T17:01:51Z"
+    },
+    {
+      "action": "git commit without tests",
+      "effect": "CI failure",
+      "confidence": 0.7,
+      "occurrences": 1,
+      "timestamp": "2025-09-30T17:01:51Z"
+    },
+    {
+      "action": "npm start without install",
+      "effect": "Module not found",
+      "confidence": 0.7,
+      "occurrences": 1,
+      "timestamp": "2025-09-30T17:01:51Z"
+    }
+  ]
+}

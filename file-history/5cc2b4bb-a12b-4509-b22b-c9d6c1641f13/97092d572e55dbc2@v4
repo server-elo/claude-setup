@@ -1,0 +1,77 @@
+"""
+Text-to-Speech using Edge TTS (Microsoft, fast, high quality, free)
+German voice support
+"""
+import asyncio
+import edge_tts
+from loguru import logger
+
+class TextToSpeech:
+    def __init__(self, voice="de-DE-KatjaNeural"):
+        """
+        Initialize Edge TTS with German voice
+
+        German voices:
+        - de-DE-KatjaNeural (Female, friendly)
+        - de-DE-ConradNeural (Male, professional)
+        - de-DE-AmalaNeural (Female, calm)
+        """
+        self.voice_name = voice
+        self.sample_rate = 24000  # Edge TTS default
+        logger.success(f"Edge TTS initialized (voice: {voice})")
+
+    def speak(self, text: str) -> bytes:
+        """Convert text to audio (returns raw PCM bytes) - sync wrapper"""
+        return asyncio.run(self._generate_audio(text))
+
+    async def _generate_audio(self, text: str) -> bytes:
+        """Generate audio using Edge TTS"""
+        try:
+            logger.debug(f"Generating speech: {text[:50]}...")
+
+            # Generate audio with Edge TTS
+            communicate = edge_tts.Communicate(text, self.voice_name)
+            audio_chunks = []
+
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_chunks.append(chunk["data"])
+
+            if audio_chunks:
+                audio_data = b''.join(audio_chunks)
+                logger.debug(f"Generated {len(audio_data)} bytes of audio")
+                return audio_data
+            else:
+                logger.warning("No audio generated")
+                return b''
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return b''
+
+    def speak_stream(self, text: str):
+        """Stream audio generation (sentence by sentence)"""
+        try:
+            logger.debug(f"Streaming speech: {text[:50]}...")
+
+            # Split into sentences for streaming
+            sentences = []
+            current = ""
+            for char in text:
+                current += char
+                if char in '.!?':
+                    sentences.append(current.strip())
+                    current = ""
+            if current.strip():
+                sentences.append(current.strip())
+
+            # Generate and yield each sentence
+            for sentence in sentences:
+                audio = self.speak(sentence)
+                if audio:
+                    yield audio
+
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")

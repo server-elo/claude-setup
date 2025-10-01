@@ -1,0 +1,247 @@
+"""
+Evaluation Cache Module
+
+Caches judge model evaluations to reduce API calls and costs.
+Implements 24-hour TTL as specified in documentation.
+"""
+
+import hashlib
+import json
+import logging
+from typing import Dict, Any, Optional
+from pathlib import Path
+import os
+import time
+
+logger = logging.getLogger("llm-red-team-ci.evaluation_cache")
+
+
+class EvaluationCache:
+    """
+    Simple file-based cache for evaluation results.
+    Uses content-based hashing for deterministic caching.
+    """
+
+    def __init__(self, cache_dir: str = None, ttl: int = 86400):
+        """
+        Initialize the evaluation cache.
+
+        Args:
+            cache_dir: Directory to store cache files (default: ~/.llm-redteam-cache)
+            ttl: Time-to-live in seconds (default: 86400 = 24 hours)
+        """
+        if cache_dir is None:
+            cache_dir = os.path.expanduser("~/.llm-redteam-cache")
+
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.ttl = ttl
+
+        logger.info(f"EvaluationCache initialized: dir={self.cache_dir}, ttl={ttl}s")
+
+    def _generate_cache_key(
+        self,
+        prompt_text: str,
+        response_text: str,
+        model: str,
+        judge_version: str,
+        attack_version: str,
+        seed: Optional[int] = None
+    ) -> str:
+        """
+        Generate a deterministic cache key based on inputs.
+
+        Args:
+            prompt_text: The prompt text
+            response_text: The response text
+            model: Model name
+            judge_version: Judge version
+            attack_version: Attack version
+            seed: Random seed (if any)
+
+        Returns:
+            SHA256 hash as hex string
+        """
+        # Create a canonical representation
+        cache_input = {
+            "prompt": prompt_text,
+            "response": response_text,
+            "model": model,
+            "judge_version": judge_version,
+            "attack_version": attack_version,
+            "seed": seed
+        }
+
+        # Sort keys for determinism
+        canonical = json.dumps(cache_input, sort_keys=True)
+
+        # Generate hash
+        cache_key = hashlib.sha256(canonical.encode()).hexdigest()
+
+        return cache_key
+
+    def get(
+        self,
+        prompt_text: str,
+        response_text: str,
+        model: str,
+        judge_version: str,
+        attack_version: str,
+        seed: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get cached evaluation if it exists and is not expired.
+
+        Returns:
+            Cached evaluation dict or None if not found/expired
+        """
+        cache_key = self._generate_cache_key(
+            prompt_text, response_text, model,
+            judge_version, attack_version, seed
+        )
+
+        cache_file = self.cache_dir / f"{cache_key}.json"
+
+        if not cache_file.exists():
+            logger.debug(f"Cache miss: {cache_key[:16]}...")
+            return None
+
+        try:
+            with open(cache_file, 'r') as f:
+                cached_data = json.load(f)
+
+            # Check if expired
+            cached_time = cached_data.get("cached_at", 0)
+            age = time.time() - cached_time
+
+            if age > self.ttl:
+                logger.debug(f"Cache expired: {cache_key[:16]}... (age: {age:.0f}s)")
+                # Delete expired cache file
+                cache_file.unlink()
+                return None
+
+            logger.info(f"Cache hit: {cache_key[:16]}... (age: {age:.0f}s)")
+            return cached_data.get("evaluation")
+
+        except Exception as e:
+            logger.error(f"Error reading cache: {e}")
+            return None
+
+    def set(
+        self,
+        prompt_text: str,
+        response_text: str,
+        model: str,
+        judge_version: str,
+        attack_version: str,
+        evaluation: Dict[str, Any],
+        seed: Optional[int] = None
+    ):
+        """
+        Cache an evaluation result.
+
+        Args:
+            prompt_text: The prompt text
+            response_text: The response text
+            model: Model name
+            judge_version: Judge version
+            attack_version: Attack version
+            evaluation: The evaluation result to cache
+            seed: Random seed (if any)
+        """
+        cache_key = self._generate_cache_key(
+            prompt_text, response_text, model,
+            judge_version, attack_version, seed
+        )
+
+        cache_file = self.cache_dir / f"{cache_key}.json"
+
+        try:
+            cached_data = {
+                "cache_key": cache_key,
+                "cached_at": time.time(),
+                "ttl": self.ttl,
+                "evaluation": evaluation,
+                "metadata": {
+                    "model": model,
+                    "judge_version": judge_version,
+                    "attack_version": attack_version,
+                    "seed": seed
+                }
+            }
+
+            with open(cache_file, 'w') as f:
+                json.dump(cached_data, f, indent=2)
+
+            logger.debug(f"Cached evaluation: {cache_key[:16]}...")
+
+        except Exception as e:
+            logger.error(f"Error writing cache: {e}")
+
+    def clear_expired(self):
+        """Remove all expired cache entries."""
+        removed = 0
+        current_time = time.time()
+
+        for cache_file in self.cache_dir.glob("*.json"):
+            try:
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+
+                cached_time = cached_data.get("cached_at", 0)
+                age = current_time - cached_time
+
+                if age > self.ttl:
+                    cache_file.unlink()
+                    removed += 1
+
+            except Exception as e:
+                logger.error(f"Error processing cache file {cache_file}: {e}")
+
+        if removed > 0:
+            logger.info(f"Cleared {removed} expired cache entries")
+
+    def clear_all(self):
+        """Remove all cache entries."""
+        removed = 0
+        for cache_file in self.cache_dir.glob("*.json"):
+            try:
+                cache_file.unlink()
+                removed += 1
+            except Exception as e:
+                logger.error(f"Error removing cache file {cache_file}: {e}")
+
+        logger.info(f"Cleared all cache ({removed} entries)")
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        cache_files = list(self.cache_dir.glob("*.json"))
+        total_entries = len(cache_files)
+        expired_entries = 0
+        total_size = 0
+        current_time = time.time()
+
+        for cache_file in cache_files:
+            try:
+                total_size += cache_file.stat().st_size
+
+                with open(cache_file, 'r') as f:
+                    cached_data = json.load(f)
+
+                cached_time = cached_data.get("cached_at", 0)
+                age = current_time - cached_time
+
+                if age > self.ttl:
+                    expired_entries += 1
+
+            except Exception:
+                pass
+
+        return {
+            "total_entries": total_entries,
+            "expired_entries": expired_entries,
+            "active_entries": total_entries - expired_entries,
+            "total_size_bytes": total_size,
+            "total_size_mb": total_size / (1024 * 1024),
+            "cache_dir": str(self.cache_dir)
+        }

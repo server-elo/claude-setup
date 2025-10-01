@@ -1,0 +1,76 @@
+"""
+Speech-to-Text using Vosk (100% local, free, multilingual)
+Supports German language for hotel receptionist
+"""
+import json
+import wave
+import io
+from vosk import Model, KaldiRecognizer
+from loguru import logger
+
+class SpeechToText:
+    def __init__(self, language="de"):
+        """
+        Initialize Vosk STT
+        language: 'de' for German, 'en' for English
+        """
+        logger.info(f"Loading Vosk STT model ({language})...")
+
+        # Map language codes to Vosk model names
+        models = {
+            "de": "vosk-model-small-de-0.15",  # German
+            "en": "vosk-model-small-en-us-0.15"  # English
+        }
+
+        model_name = models.get(language, models["de"])
+        model_path = f"/Users/tolga/.vosk/models/{model_name}"
+
+        try:
+            self.model = Model(model_path)
+            self.sample_rate = 16000
+            logger.success(f"Vosk STT loaded ({language})")
+        except Exception as e:
+            logger.error(f"Failed to load Vosk model: {e}")
+            logger.info("Download with: python -c 'from vosk import Model; Model(lang=\"de\")'")
+            raise
+
+    def transcribe(self, audio_data) -> str:
+        """Convert audio bytes to text"""
+        try:
+            # Create recognizer
+            recognizer = KaldiRecognizer(self.model, self.sample_rate)
+
+            # Process audio
+            if isinstance(audio_data, bytes):
+                recognizer.AcceptWaveform(audio_data)
+            else:
+                # Handle numpy array or other formats
+                recognizer.AcceptWaveform(audio_data.tobytes())
+
+            # Get result
+            result = json.loads(recognizer.FinalResult())
+            transcript = result.get('text', '')
+
+            logger.debug(f"Transcribed: {transcript}")
+            return transcript
+
+        except Exception as e:
+            logger.error(f"STT error: {e}")
+            return ""
+
+    def transcribe_stream(self, audio_stream):
+        """Stream transcription (for real-time)"""
+        recognizer = KaldiRecognizer(self.model, self.sample_rate)
+
+        for audio_chunk in audio_stream:
+            if recognizer.AcceptWaveform(audio_chunk):
+                result = json.loads(recognizer.Result())
+                text = result.get('text', '')
+                if text:
+                    yield text
+
+        # Final result
+        final = json.loads(recognizer.FinalResult())
+        text = final.get('text', '')
+        if text:
+            yield text

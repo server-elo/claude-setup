@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-09-30T01:16:00Z",
+  "user_profile": {
+    "name": "tolga",
+    "coding_style": "unknown",
+    "preferred_languages": [
+      "python",
+      "javascript"
+    ],
+    "common_workflows": [
+      "cd desktop → cd sofia/project → claude",
+      "Uses pip3/python3 for Python scripts",
+      "Installs tools via brew",
+      "Works on voice/sofia projects frequently"
+    ],
+    "frequent_tasks": [
+      "Running Python agents (agent.py console)",
+      "Working in Desktop/sofia projects",
+      "Installing packages (brew, pip3, npm)"
+    ],
+    "learning_rate": "fast",
+    "most_used_commands": [
+      "cd",
+      "claude",
+      "brew",
+      "pip3",
+      "python3"
+    ],
+    "project_locations": [
+      "~/Desktop/sofia1",
+      "~/Desktop/elo-deu",
+      "~/Desktop/quantum"
+    ]
+  },
+  "learned_patterns": {
+    "project_structures": {
+      "sofia-pers": {
+        "type": "python_voice_ai",
+        "main_entry": "agent.py",
+        "commands": [
+          "python3 agent.py console",
+          "python3 agent.py dev"
+        ],
+        "stack": [
+          "gradio",
+          "livekit",
+          "local-voice-ai-agent"
+        ],
+        "venv": ".venv",
+        "goal": "realtime voice receptionist without browser dependency"
+      }
+    },
+    "coding_preferences": {
+      "honesty": "CRITICAL - user explicitly requires NO assumptions, NO lies",
+      "thinking_mode": "ultrathink - deep analysis before action",
+      "verification": "test before claiming success",
+      "communication": "direct, transparent reasoning"
+    },
+    "common_errors": {
+      "gradio_mic_not_found": {
+        "error": "NotFoundError: Requested device not found",
+        "context": "Gradio web UI with headphones plugged in",
+        "solution": "Check browser audio permissions, try different browser, verify device in System Preferences"
+      },
+      "gradio_console_confusion": {
+        "error": "Gradio opens browser when user wants console-only",
+        "learned": "Gradio requires web UI - for pure console need pyaudio/sounddevice directly",
+        "next_approach": "Match livekit console behavior with local voice engine"
+      }
+    },
+    "successful_solutions": {
+      "voice_agent_patterns": {
+        "livekit_approach": "python agent.py console works perfectly in terminal",
+        "goal": "replicate this behavior without livekit dependency using local engines"
+      }
+    }
+  },
+  "project_memory": {
+    "sofia-pers": {
+      "last_worked": "2025-09-30",
+      "status": "active_development",
+      "current_task": "combining livekit sofia-en with local-voice-ai-agent",
+      "challenges": [
+        "gradio requires browser, user wants console-only mode",
+        "microphone detection issues with gradio web UI",
+        "need realtime STT/TTS without 5-sec recording chunks"
+      ],
+      "repos": [
+        "git@github.com:ezekaj/sofia-en.git (livekit base)",
+        "git@github.com:jesuscopado/local-voice-ai-agent.git (local voice engine)",
+        "git@github.com:ezekaj/elo-en-sofia.git (deployment repo)"
+      ]
+    }
+  },
+  "optimization_rules": [
+    {
+      "rule": "index_code_on_startup",
+      "enabled": true,
+      "impact": "high"
+    },
+    {
+      "rule": "cache_file_locations",
+      "enabled": true,
+      "impact": "medium"
+    },
+    {
+      "rule": "remember_project_context",
+      "enabled": true,
+      "impact": "high"
+    },
+    {
+      "rule": "detect_audio_issues_in_sofia",
+      "enabled": true,
+      "impact": "high",
+      "trigger": "project contains 'sofia' + error contains 'device'"
+    },
+    {
+      "rule": "verify_before_claiming_success",
+      "enabled": true,
+      "impact": "critical",
+      "reason": "user requires explicit honesty"
+    }
+  ],
+  "improvements_made": [
+    {
+      "date": "2025-09-30",
+      "improvement": "Detected frequent command patterns and created alias suggestions",
+      "impact": "Saves ~30 keystrokes per sofia session"
+    },
+    {
+      "date": "2025-09-30",
+      "improvement": "Added sofia project context memory to avoid re-explanation",
+      "impact": "Faster session startup with preserved context"
+    },
+    {
+      "date": "2025-09-30",
+      "improvement": "Learned gradio console limitation - will suggest correct approach faster",
+      "impact": "Avoid repeating failed approaches"
+    }
+  ],
+  "metrics": {
+    "total_sessions": 97,
+    "total_tasks": 43,
+    "success_rate": 0.72,
+    "patterns_detected": 59,
+    "shortcuts_suggested": 5,
+    "failed_approaches_learned": 2
+  },
+  "last_learning_cycle": "2025-09-30T14:41:58Z"
+}

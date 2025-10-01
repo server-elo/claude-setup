@@ -1,0 +1,32 @@
+[
+  {
+    "content": "Add open source license (MIT/Apache)",
+    "status": "completed",
+    "activeForm": "Adding open source license"
+  },
+  {
+    "content": "Create comprehensive README.md",
+    "status": "completed",
+    "activeForm": "Creating comprehensive README"
+  },
+  {
+    "content": "Add CONTRIBUTING.md guide",
+    "status": "completed",
+    "activeForm": "Adding CONTRIBUTING guide"
+  },
+  {
+    "content": "Create CODE_OF_CONDUCT.md",
+    "status": "in_progress",
+    "activeForm": "Creating CODE_OF_CONDUCT"
+  },
+  {
+    "content": "Add security policy (SECURITY.md)",
+    "status": "pending",
+    "activeForm": "Adding security policy"
+  },
+  {
+    "content": "Create GitHub repository",
+    "status": "pending",
+    "activeForm": "Creating GitHub repository"
+  }
+]

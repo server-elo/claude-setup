@@ -1,0 +1,180 @@
+{
+  "name": "Claude Evolution Engine",
+  "description": "Self-improving system that learns from every interaction",
+
+  "learning_mechanisms": {
+    "interaction_logging": {
+      "enabled": true,
+      "log_file": "~/.claude/memory/interactions.jsonl",
+      "capture": [
+        "user_intent",
+        "claude_response",
+        "tools_used",
+        "success_rating",
+        "time_taken",
+        "context_size"
+      ]
+    },
+
+    "pattern_extraction": {
+      "enabled": true,
+      "analyze_every": 10,
+      "patterns_to_detect": [
+        "frequently_asked_questions",
+        "common_error_patterns",
+        "repetitive_tasks",
+        "user_preferences",
+        "workflow_patterns",
+        "tool_usage_efficiency"
+      ]
+    },
+
+    "feedback_loop": {
+      "implicit_feedback": {
+        "task_completion": "positive",
+        "user_correction": "negative",
+        "follow_up_questions": "partial_success",
+        "no_response": "unclear"
+      },
+      "explicit_feedback": {
+        "thumbs_up": "positive",
+        "thumbs_down": "negative",
+        "rating": "weighted"
+      }
+    }
+  },
+
+  "self_improvement": {
+    "knowledge_base": {
+      "location": "~/.claude/memory/knowledge-base.json",
+      "structure": {
+        "learned_patterns": [],
+        "user_preferences": {},
+        "project_specific": {},
+        "error_solutions": {},
+        "optimization_rules": []
+      },
+      "update_frequency": "after_each_session"
+    },
+
+    "capability_expansion": {
+      "detect_gaps": true,
+      "suggest_new_tools": true,
+      "create_shortcuts": true,
+      "optimize_workflows": true
+    }
+  },
+
+  "real_capabilities_using_your_machine": {
+    "file_system_learning": {
+      "enabled": true,
+      "actions": [
+        "Index all project structures you work on",
+        "Remember file locations across projects",
+        "Learn your directory organization patterns",
+        "Build searchable index of all code"
+      ],
+      "implementation": {
+        "index_path": "~/.claude/memory/file-index.db",
+        "update_on": ["read", "write", "edit"],
+        "search_method": "fuzzy_semantic"
+      }
+    },
+
+    "command_history_analysis": {
+      "enabled": true,
+      "analyze": "~/.zsh_history",
+      "learn": [
+        "Your most used commands",
+        "Common command patterns",
+        "Workflow sequences",
+        "Time-of-day patterns"
+      ],
+      "auto_suggest": true
+    },
+
+    "project_memory": {
+      "enabled": true,
+      "remember": [
+        "Project architecture decisions",
+        "Why certain code was written certain way",
+        "Previous bugs and solutions",
+        "Your coding style preferences",
+        "Dependencies and their versions"
+      ],
+      "persistence": "unlimited"
+    },
+
+    "performance_monitoring": {
+      "enabled": true,
+      "track": {
+        "tool_execution_time": true,
+        "token_usage": true,
+        "success_rate": true,
+        "user_satisfaction": true
+      },
+      "optimize": {
+        "slow_operations": "cache_results",
+        "repetitive_tasks": "create_shortcuts",
+        "high_token_usage": "summarize_better"
+      }
+    },
+
+    "local_compute_utilization": {
+      "enabled": true,
+      "use_cases": [
+        {
+          "task": "code_indexing",
+          "tool": "ripgrep + custom index",
+          "benefit": "instant semantic search"
+        },
+        {
+          "task": "ast_parsing",
+          "tool": "tree-sitter",
+          "benefit": "understand code structure instantly"
+        },
+        {
+          "task": "git_analysis",
+          "tool": "git log parsing",
+          "benefit": "understand code evolution"
+        },
+        {
+          "task": "dependency_graph",
+          "tool": "static analysis tools",
+          "benefit": "visualize project structure"
+        }
+      ]
+    }
+  },
+
+  "continuous_improvement": {
+    "daily_analysis": {
+      "enabled": true,
+      "time": "after_each_session",
+      "analyze": [
+        "What worked well today",
+        "What failed or was slow",
+        "What user had to repeat multiple times",
+        "What caused confusion"
+      ],
+      "output": "~/.claude/memory/daily-learnings.jsonl"
+    },
+
+    "auto_optimization": {
+      "enabled": true,
+      "actions": [
+        "Create new shortcuts for repetitive tasks",
+        "Update trigger patterns based on usage",
+        "Adjust confidence thresholds",
+        "Improve response templates"
+      ]
+    }
+  },
+
+  "transparency": {
+    "show_learning": true,
+    "show_improvements": true,
+    "explain_decisions": true,
+    "confidence_levels": true
+  }
+}

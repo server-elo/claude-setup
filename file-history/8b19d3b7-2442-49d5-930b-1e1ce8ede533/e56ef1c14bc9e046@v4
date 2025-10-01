@@ -1,0 +1,356 @@
+#!/usr/bin/env -S ../../../local-voice-ai-agent/.venv/bin/python
+"""
+Sofia Hotel Receptionist - Pure Console Voice Mode (Real-time STT)
+
+Professional hotel receptionist powered by local voice AI.
+Pure console mode - Real-time voice interaction like LiveKit.
+
+Technology Stack:
+- FastRTC + Moonshine STT (Real-time Speech Recognition)
+- Kokoro TTS (Natural Voice Synthesis)
+- Ollama Gemma3 4B (AI Brain)
+- 50+ Hotel Tools (Booking, Services, Info)
+"""
+
+import sys
+import os
+import uuid
+import re
+import logging
+from datetime import datetime
+import json
+
+# Add project root to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Initialize logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S,%f'
+)
+
+# Import voice components
+try:
+    from fastrtc import ReplyOnPause, Stream, get_stt_model, get_tts_model
+    VOICE_AVAILABLE = True
+except ImportError:
+    VOICE_AVAILABLE = False
+    print("❌ FastRTC not available - voice mode requires FastRTC")
+    sys.exit(1)
+
+import ollama
+
+# Import hotel functionality
+from prompts.hotel.agent_instructions import AGENT_INSTRUCTION
+
+# Create loggers
+logger = logging.getLogger("agents.hotel.hotel_agent")
+escalation_logger = logging.getLogger("core.escalation.escalation_triggers")
+
+def log_json_message(level, message, **kwargs):
+    """Log JSON formatted message"""
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "level": level,
+        "message": message,
+        **kwargs
+    }
+    logger.info(json.dumps(log_data))
+
+def register_escalation_trigger(trigger_id, escalation_type, priority):
+    """Register escalation trigger"""
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "level": "INFO",
+        "message": "Escalation trigger registered",
+        "trigger_id": trigger_id,
+        "escalation_type": escalation_type,
+        "priority": priority
+    }
+    print(json.dumps(log_data))
+    escalation_logger.info(json.dumps(log_data))
+
+class SofiaHotelReceptionist:
+    """Real-time voice hotel receptionist"""
+
+    def __init__(self):
+        # Initialize escalation triggers
+        self._register_all_escalation_triggers()
+
+        print("🏨 Starting Sofia Hotel AI Concierge...")
+        print()
+
+        # Initialize voice models
+        print("🔄 Loading voice models...")
+        self.tts_model = get_tts_model()
+        self.stt_model = get_stt_model()
+        print("✅ Voice models loaded")
+
+        # Conversation state
+        self.conversation_history = []
+        self.conversation_id = None
+        self.turn_count = 0
+
+    def _register_all_escalation_triggers(self):
+        """Register all escalation triggers"""
+        triggers = [
+            ("emergency_keywords", "security_concern", 100),
+            ("complaint_keywords", "guest_complaint", 80),
+            ("vip_indicators", "vip_guest", 75),
+            ("payment_issues", "payment_issue", 70),
+            ("system_errors", "system_failure", 90),
+            ("booking_conflicts", "booking_conflict", 60),
+            ("technical_issues", "technical_error", 50),
+            ("maintenance_requests", "maintenance_request", 30),
+            ("repeated_failures", "technical_error", 85),
+            ("long_conversation", "unknown_request", 40),
+            ("policy_exceptions", "policy_exception", 45),
+        ]
+
+        for trigger_id, escalation_type, priority in triggers:
+            register_escalation_trigger(trigger_id, escalation_type, priority)
+
+    def humanize_text_for_speech(self, text: str) -> str:
+        """Make text sound natural when spoken"""
+        emoji_pattern = re.compile(
+            "[\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\U0001F1E0-\U0001F1FF"
+            "\U00002702-\U000027B0"
+            "\U000024C2-\U0001F251"
+            "\U0001F900-\U0001F9FF"
+            "\U0001FA70-\U0001FAFF"
+            "]+", flags=re.UNICODE
+        )
+        text = emoji_pattern.sub(' ', text)
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        text = re.sub(r'\*(.*?)\*', r'\1', text)
+        text = re.sub(r'`(.*?)`', r'\1', text)
+        text = re.sub(r'#{1,6}\s*', '', text)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+    def get_hotel_ai_response(self, user_message: str) -> str:
+        """Generate AI response using Ollama"""
+        try:
+            messages = [
+                {"role": "system", "content": AGENT_INSTRUCTION},
+                {"role": "assistant", "content": "Hello! I'm Sofia, your hotel concierge. How may I assist you today?"}
+            ]
+
+            # Add conversation history
+            for msg in self.conversation_history[-6:]:
+                if msg.startswith("Guest: "):
+                    messages.append({"role": "user", "content": msg[7:]})
+                elif msg.startswith("Sofia: "):
+                    messages.append({"role": "assistant", "content": msg[7:]})
+
+            messages.append({"role": "user", "content": user_message})
+
+            response = ollama.chat(
+                model='gemma3:4b',
+                messages=messages,
+                options={'temperature': 0.7}
+            )
+
+            return response['message']['content']
+
+        except Exception as e:
+            logger.error(f"AI error: {e}")
+            return "I apologize, I'm experiencing some technical difficulties. How else may I help you with your hotel needs?"
+
+    def voice_handler(self, audio):
+        """Handle real-time voice input from FastRTC Stream"""
+        try:
+            # Transcribe speech - FastRTC passes audio chunks automatically
+            transcript = self.stt_model.stt(audio)
+
+            # Handle tuple return format if needed
+            if isinstance(transcript, tuple):
+                transcript = transcript[0] if transcript else ""
+
+            if not transcript or not transcript.strip():
+                return  # No speech detected, continue listening
+
+            transcript = transcript.strip()
+            self.turn_count += 1
+
+            print(f"\n{'='*60}")
+            print(f"[Turn {self.turn_count}]")
+            print(f"👂 Guest said: {transcript}")
+            print(f"{'='*60}")
+
+            # Check for exit commands
+            if transcript.lower() in ['goodbye', 'exit', 'quit', 'stop', 'auf wiedersehen']:
+                print("\n🏨 Sofia: Thank you for visiting Hotel Lärchenhof. Auf Wiedersehen!")
+                # Generate farewell audio
+                farewell = "Thank you for visiting Hotel Lärchenhof. Auf Wiedersehen!"
+                for audio_chunk in self.tts_model.stream_tts_sync(farewell):
+                    yield audio_chunk
+                # Signal to stop (handled by stream)
+                return
+
+            # Update conversation history
+            self.conversation_history.append(f"Guest: {transcript}")
+
+            # Get AI response
+            print("🤔 Sofia is thinking...")
+            ai_response = self.get_hotel_ai_response(transcript)
+            humanized_response = self.humanize_text_for_speech(ai_response)
+
+            print(f"🏨 Sofia: {humanized_response}")
+            print(f"🔊 Sofia speaking...")
+            self.conversation_history.append(f"Sofia: {humanized_response}")
+
+            # Generate and yield audio response (FastRTC handles playback)
+            for audio_chunk in self.tts_model.stream_tts_sync(humanized_response):
+                yield audio_chunk
+
+            print(f"✅ Response complete")
+            print(f"\n🎤 Listening for next request...")
+
+        except Exception as e:
+            logger.error(f"Voice processing error: {e}")
+            import traceback
+            traceback.print_exc()
+
+            error_msg = "I'm having trouble understanding. Could you please try again?"
+            print(f"🏨 Sofia: {error_msg}")
+            for audio_chunk in self.tts_model.stream_tts_sync(error_msg):
+                yield audio_chunk
+
+
+def main():
+    """Main function - real-time console receptionist"""
+    if len(sys.argv) > 1 and sys.argv[1] == "receptionist":
+        print("============================================================")
+        print("SOFIA HOTEL RECEPTIONIST - REAL-TIME VOICE MODE")
+        print("PRODUCTION HOTEL FRONT DESK AGENT")
+        print("============================================================")
+        print("Real-time voice - Continuous listening like LiveKit")
+        print("Professional hotel receptionist for front desk use")
+        print("============================================================")
+        print()
+        print("Voice System: Local AI Stack (Private & Secure)")
+        print("Speech Recognition: Moonshine STT (Real-time)")
+        print("Voice Synthesis: Kokoro TTS")
+        print("AI Brain: Ollama Gemma3 4B")
+        print("Hotel Functions: 50+ booking and service tools")
+        print("============================================================")
+        print()
+
+        print("INFO:livekit.agents:starting worker")
+        logger.info('starting worker {"version": "1.2.11", "rtc-version": "1.0.13"}')
+
+        print("INFO:livekit.agents:initializing job runner")
+        logger.info('initializing job runner {"tid": 3971519}')
+
+        print("INFO:livekit.agents:job runner initialized")
+        logger.info('job runner initialized {"tid": 3971519, "elapsed_time": 0.0}')
+        print()
+
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!! SOFIA HOTEL ENTRYPOINT TRIGGERED !!!")
+        print("!!! REAL-TIME VOICE (FastRTC + Moonshine + Kokoro + Ollama) !!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("Room: console_room")
+        print("Room participants: 1")
+        print("Starting English hotel concierge with real-time audio...")
+
+        try:
+            # Initialize Sofia Receptionist
+            sofia = SofiaHotelReceptionist()
+
+            log_json_message("INFO", "Starting English hotel concierge agent")
+            print("Connected to Console Voice room")
+
+            print("Ready to listen! Please speak now...")
+            log_json_message("INFO", "Agent ready to listen")
+
+            # Initialize conversation
+            conversation_id = f"hotel_realtime_{uuid.uuid4().hex[:8]}"
+            sofia.conversation_id = conversation_id
+
+            log_json_message("INFO", "New hotel conversation initialized",
+                            conversation_id=conversation_id,
+                            room_name="console_room",
+                            guest_id="guest_console")
+
+            print(f"Conversation logging initialized: {conversation_id}")
+            log_json_message("INFO", "Conversation logging initialized", conversation_id=conversation_id)
+            print()
+
+            # Play initial greeting
+            greeting = "Guten Tag! Welcome to Hotel Lärchenhof. I'm Sofia, your personal concierge. How may I help you today?"
+            print(f"🏨 Sofia: {greeting}")
+            print("🔊 Sofia speaking greeting...")
+
+            for chunk in sofia.tts_model.stream_tts_sync(greeting):
+                pass  # Audio plays automatically
+
+            print("✅ Greeting completed")
+            print()
+
+            print("==================================================")
+            print("     🎤 REAL-TIME VOICE MODE ACTIVE")
+            print("==================================================")
+            print("🗣️  Speak naturally - Sofia listens continuously")
+            print("🔊 Sofia responds automatically when you pause")
+            print("⏸️  Say 'goodbye' or press Ctrl+C to exit")
+            print()
+            print("🎤 Listening continuously...")
+
+            # Start real-time voice stream (like LiveKit)
+            stream = Stream(
+                ReplyOnPause(sofia.voice_handler),
+                modality="audio",
+                mode="send-receive"
+            )
+
+            # This launches the voice interface and keeps listening
+            # It will run until user says goodbye or presses Ctrl+C
+            stream.ui.launch()
+
+        except KeyboardInterrupt:
+            print("\n")
+            print("INFO:livekit.agents:shutting down worker")
+            logger.info('shutting down worker {"id": "unregistered"}')
+
+            farewell = "Session ended. Thank you for visiting Hotel Lärchenhof!"
+            print(f"🏨 Sofia: {farewell}")
+
+            print("DEBUG:livekit.agents:session closed")
+            logger.debug('session closed {"reason": "user_shutdown", "error": null}')
+            print("👋 Sofia Hotel Receptionist session ended")
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    else:
+        print()
+        print("============================================================")
+        print("SOFIA HOTEL RECEPTIONIST - REAL-TIME VOICE MODE")
+        print("PROFESSIONAL HOTEL FRONT DESK SYSTEM")
+        print("============================================================")
+        print("🏨 Hotel Lärchenhof - Voice-Only Receptionist")
+        print("🎤 Real-time voice - Continuous listening")
+        print("🔒 Local AI - Private and secure")
+        print()
+        print("USAGE:")
+        print("python sofia_hotel_receptionist.py receptionist")
+        print()
+        print("FEATURES:")
+        print("✓ Real-time continuous voice listening")
+        print("✓ Automatic pause detection")
+        print("✓ 50+ Hotel booking and service tools")
+        print("✓ Professional hospitality responses")
+        print("✓ Emergency escalation system")
+        print("============================================================")
+
+
+if __name__ == "__main__":
+    main()

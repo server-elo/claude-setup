@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""
+Quick test script for Simple Voice Handler
+Run: python test_simple.py
+"""
+from src.voice.console_handler_simple import SimpleVoiceHandler
+
+# System prompt for dental receptionist
+SYSTEM_PROMPT = """Du bist Sofia, die freundliche Rezeptionistin in der Zahnarztpraxis Dr. Müller.
+Du sprichst nur Deutsch. Sei höflich, hilfsbereit und professionell.
+Antworte kurz und präzise (maximal 2-3 Sätze)."""
+
+if __name__ == "__main__":
+    handler = SimpleVoiceHandler(llm_model="gemma2:2b", language="de")
+    handler.run_conversation(SYSTEM_PROMPT)

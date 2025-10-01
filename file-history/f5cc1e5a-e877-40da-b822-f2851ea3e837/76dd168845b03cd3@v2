@@ -1,0 +1,240 @@
+"""
+VAD-Based Console Voice Handler - No Ctrl+C needed
+Automatic speech detection with WebRTC VAD
+"""
+import pyaudio
+import wave
+import io
+import sys
+import threading
+import queue
+import webrtcvad
+import collections
+from loguru import logger
+from .stt import SpeechToText
+from .tts import TextToSpeech
+from .llm import LanguageModel
+
+class VADConsoleVoiceHandler:
+    def __init__(self, llm_model: str = "gemma2:2b", language: str = "de"):
+        """Initialize with VAD for automatic speech detection"""
+        logger.info("Initializing VAD-based voice handler - NO CTRL+C NEEDED")
+
+        # Components
+        self.stt = SpeechToText(language=language)
+        self.tts = TextToSpeech()
+        self.llm = LanguageModel(model=llm_model)
+
+        # Audio settings
+        self.CHUNK = 480  # 30ms at 16kHz (required for VAD)
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        # VAD settings
+        self.vad = webrtcvad.Vad(3)  # Aggressiveness: 0-3 (3 = most aggressive)
+
+        # Speech detection settings
+        self.SILENCE_DURATION = 1.0  # 1 second of silence = end of speech
+        self.MIN_SPEECH_DURATION = 0.3  # Minimum 300ms to be considered speech
+
+        self.pyaudio = pyaudio.PyAudio()
+        self.is_listening = False
+
+        # Processing queues for parallel execution
+        self.audio_queue = queue.Queue()
+        self.response_queue = queue.Queue()
+
+        logger.success("VAD console handler ready - Automatic speech detection active")
+
+    def is_speech(self, audio_chunk: bytes) -> bool:
+        """Check if audio chunk contains speech using VAD"""
+        try:
+            return self.vad.is_speech(audio_chunk, self.RATE)
+        except Exception as e:
+            logger.debug(f"VAD error: {e}")
+            return False
+
+    def record_with_vad(self):
+        """Record audio automatically detecting speech start and end"""
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        frames = []
+        speech_frames = []
+        silence_frames = 0
+        speech_started = False
+
+        # Ring buffer for pre-speech audio (to catch beginning of words)
+        ring_buffer = collections.deque(maxlen=30)  # 900ms buffer
+
+        silence_threshold = int(self.SILENCE_DURATION * self.RATE / self.CHUNK)
+        min_speech_frames = int(self.MIN_SPEECH_DURATION * self.RATE / self.CHUNK)
+
+        try:
+            while self.is_listening:
+                chunk = stream.read(self.CHUNK, exception_on_overflow=False)
+                is_speech_chunk = self.is_speech(chunk)
+
+                if not speech_started:
+                    # Waiting for speech to start
+                    ring_buffer.append((chunk, is_speech_chunk))
+
+                    if is_speech_chunk:
+                        logger.info("Speech detected, recording...")
+                        speech_started = True
+                        # Add buffered audio before speech
+                        for buffered_chunk, _ in ring_buffer:
+                            speech_frames.append(buffered_chunk)
+                        speech_frames.append(chunk)
+                        silence_frames = 0
+                else:
+                    # Speech in progress
+                    speech_frames.append(chunk)
+
+                    if is_speech_chunk:
+                        silence_frames = 0
+                    else:
+                        silence_frames += 1
+
+                    # Check if speech ended (silence threshold reached)
+                    if silence_frames >= silence_threshold:
+                        if len(speech_frames) >= min_speech_frames:
+                            logger.info("Speech ended, processing...")
+                            stream.stop_stream()
+                            stream.close()
+                            return b''.join(speech_frames)
+                        else:
+                            # Too short, reset
+                            speech_frames = []
+                            speech_started = False
+                            silence_frames = 0
+
+        except KeyboardInterrupt:
+            logger.info("Interrupted")
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+        return b''.join(speech_frames) if speech_frames else b''
+
+    def play_audio(self, audio_data: bytes):
+        """Play audio through speakers"""
+        try:
+            stream = self.pyaudio.open(
+                format=self.FORMAT,
+                channels=self.CHANNELS,
+                rate=self.RATE,
+                output=True,
+                frames_per_buffer=self.CHUNK
+            )
+
+            chunk_size = self.CHUNK * 2
+            for i in range(0, len(audio_data), chunk_size):
+                stream.write(audio_data[i:i + chunk_size])
+
+            stream.stop_stream()
+            stream.close()
+
+        except Exception as e:
+            logger.error(f"Audio playback error: {e}")
+
+    def parallel_process(self, audio_data: bytes, system_prompt: str):
+        """Process audio in parallel pipeline"""
+
+        def transcribe():
+            transcript = self.stt.transcribe(audio_data)
+            self.audio_queue.put(transcript)
+            logger.debug(f"Transcription: {transcript[:50]}...")
+
+        def get_response_and_speak():
+            transcript = self.audio_queue.get()
+            if transcript and transcript.strip():
+                print(f"Sie: {transcript}")
+
+                # Check for exit
+                if any(word in transcript.lower() for word in ["auf wiedersehen", "tschüss", "beenden"]):
+                    print("Sofia: Auf Wiedersehen. Ich wünsche Ihnen einen schönen Tag.")
+                    self.response_queue.put(("EXIT", None, None))
+                    return
+
+                # Get LLM response
+                response = self.llm.chat(transcript, system_prompt=system_prompt)
+                print(f"Sofia: {response}")
+
+                # Generate speech
+                audio = self.tts.speak(response)
+                self.response_queue.put((transcript, response, audio))
+            else:
+                self.response_queue.put((None, None, None))
+
+        t1 = threading.Thread(target=transcribe)
+        t2 = threading.Thread(target=get_response_and_speak)
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        return self.response_queue.get()
+
+    def run_conversation(self, system_prompt: str):
+        """Run continuous conversation with VAD"""
+        print("\n" + "=" * 60)
+        print("SOFIA - Hotel Receptionist - Continuous Listening Mode")
+        print("=" * 60)
+        print("Anleitung:")
+        print("  - Sprechen Sie einfach - keine Taste drücken")
+        print("  - Sofia antwortet automatisch")
+        print("  - Sagen Sie 'Auf Wiedersehen' zum Beenden")
+        print("  - Oder drücken Sie Ctrl+C für Notfall-Stopp")
+        print("=" * 60)
+        print("\nWarte auf Ihre Stimme...")
+        print()
+
+        self.is_listening = True
+
+        try:
+            while self.is_listening:
+                # Record with VAD - automatic start/stop
+                audio_data = self.record_with_vad()
+
+                if not audio_data or len(audio_data) < 1000:
+                    continue
+
+                # Process in parallel
+                transcript, response, audio = self.parallel_process(audio_data, system_prompt)
+
+                if transcript == "EXIT":
+                    break
+
+                if not transcript or not response:
+                    print("Entschuldigung, ich habe Sie nicht verstanden.\n")
+                    print("Warte auf Ihre Stimme...")
+                    continue
+
+                # Play response
+                if audio:
+                    self.play_audio(audio)
+
+                print("\nWarte auf Ihre Stimme...")
+                print()
+
+        except KeyboardInterrupt:
+            print("\n\nNotfall-Stopp aktiviert. Auf Wiedersehen.")
+        except Exception as e:
+            logger.error(f"Error: {e}")
+            print(f"Fehler: {e}")
+        finally:
+            self.is_listening = False
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.is_listening = False
+        self.pyaudio.terminate()
+        logger.info("VAD console handler cleaned up")

@@ -1,0 +1,27 @@
+# Sofia Local - 100% Free & Open Source Voice AI
+# Zero cloud costs, everything runs locally
+# German Hotel Receptionist Edition - LOW LATENCY
+
+# Voice Processing (Local + Cloud Edge TTS)
+vosk>=0.3.45                   # Speech-to-Text (Vosk - better multilingual)
+edge-tts>=6.1.9               # Text-to-Speech (Microsoft Edge, free, Seraphina)
+pyaudio                        # Console audio I/O
+webrtcvad                      # Voice activity detection
+pydub                          # Audio format conversion
+
+# LLM (Local)
+ollama>=0.4.7                  # Local LLM interface
+
+# Console & Terminal
+loguru>=0.7.3                  # Better logging
+python-dotenv                  # Environment config
+
+# Core utilities
+numpy                          # Audio processing
+python-dateutil                # Date/time utilities
+requests                       # HTTP requests
+aiohttp                        # Async HTTP
+soundfile                      # Audio file I/O
+
+# Async support (for Edge TTS)
+asyncio                        # Async operations

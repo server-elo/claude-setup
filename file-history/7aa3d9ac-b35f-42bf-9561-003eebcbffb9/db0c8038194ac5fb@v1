@@ -1,0 +1,59 @@
+# CLAUDE.md - Claude Code Configuration Project
+
+This project is focused on optimizing and configuring Claude Code for maximum productivity.
+
+## Project Overview
+This is a configuration and optimization project for Claude Code, implementing a comprehensive setup with MCP servers, subagents, hooks, and advanced workflows.
+
+## Architecture
+- **MCP Servers**: GitHub, Filesystem, and additional specialized servers
+- **Subagents**: Task-specific AI assistants for code review, debugging, testing
+- **Hooks**: Lifecycle automation for pre/post tool execution
+- **Memory System**: 3-tier persistent context management
+
+## Current Setup Status
+### ✅ Installed MCP Servers
+- GitHub MCP (`@modelcontextprotocol/server-github`)
+- Filesystem MCP (`@modelcontextprotocol/server-filesystem`)
+
+### 🔄 In Progress
+- Vector database integration (Qdrant)
+- Specialized subagents
+- Lifecycle hooks configuration
+
+### 📋 Planned
+- Sentry MCP for error tracking
+- Linear/Jira MCP for project management
+- Puppeteer MCP for browser automation
+- Custom slash commands library
+
+## Development Commands
+Since this is a configuration project, main tasks involve:
+- `claude mcp list` - Check MCP server status
+- `claude mcp add <server> <command>` - Add new MCP servers
+- `claude mcp remove <server>` - Remove MCP servers
+
+## File Structure
+```
+.claude/
+├── CLAUDE.md (this file - project architecture)
+├── CLAUDE.local.md (personal workspace notes)
+├── agents/ (subagent configurations)
+├── commands/ (custom slash commands)
+├── hooks/ (lifecycle automation)
+└── settings.json (Claude Code settings)
+```
+
+## Configuration Philosophy
+- Start with essential foundation (memory, GitHub, filesystem)
+- Add specialized tools based on actual usage patterns
+- Automate repetitive tasks through hooks and commands
+- Maintain clean separation between global and project-specific configs
+
+## Quality Standards
+- All MCP servers must be verified as connected before proceeding
+- Subagents should have clear, specific purposes
+- Hooks should be non-intrusive and failsafe
+- Documentation should be kept current with implementation
+
+Last Updated: 2025-01-09

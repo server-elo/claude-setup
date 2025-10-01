@@ -1,0 +1,11 @@
+"""
+Advanced Red Team Framework
+Implements 5 state-of-the-art research papers:
+1. AutoRedTeamer - Multi-agent with lifelong attack integration
+2. PersonaTeaming - Persona-based attack generation (144% improvement)
+3. Guided Reasoning - MITRE ATT&CK Matrix integration
+4. RedAgent - Context-aware autonomous agent (5-query jailbreak)
+5. SEAS - Self-evolving adversarial safety optimization
+"""
+
+__version__ = "1.0.0"

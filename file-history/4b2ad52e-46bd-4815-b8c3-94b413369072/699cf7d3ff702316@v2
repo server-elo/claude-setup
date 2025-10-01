@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""
+Quick TTS test to verify Piper audio generation
+"""
+from src.voice.tts_piper_local import PiperLocalTTS
+
+tts = PiperLocalTTS(voice_model="de_DE-thorsten-medium")
+
+test_text = "Hallo! Das ist ein Test."
+print(f"Generating audio for: {test_text}")
+
+audio = tts.speak(test_text)
+
+if audio and len(audio) > 0:
+    print(f"✅ SUCCESS! Generated {len(audio)} bytes of audio")
+else:
+    print("❌ FAILED - No audio generated")

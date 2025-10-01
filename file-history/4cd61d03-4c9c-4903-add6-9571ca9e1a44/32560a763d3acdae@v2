@@ -1,0 +1,12 @@
+# MAX POWER V3 - Auto-start daemons on terminal launch
+# Add this to your ~/.zshrc:
+#   source ~/.zshrc.claude-autostart
+
+# Only start daemons once per boot (not every terminal window)
+if [ ! -f /tmp/claude-daemons-started ]; then
+    # Start daemons in background
+    ~/.claude/scripts/auto-start-daemons.sh > /dev/null 2>&1 &
+
+    # Mark as started
+    touch /tmp/claude-daemons-started
+fi

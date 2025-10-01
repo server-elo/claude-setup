@@ -1,0 +1,129 @@
+"""
+Text-to-Speech using Piper TTS (100% local, fast, high quality)
+German voice support
+"""
+import io
+import wave
+import os
+import urllib.request
+from piper.voice import PiperVoice
+from loguru import logger
+
+class TextToSpeech:
+    def __init__(self, voice="de_DE-thorsten-high"):
+        """
+        Initialize Piper TTS with German voice
+
+        German voices:
+        - de_DE-thorsten-high (Male, high quality)
+        - de_DE-thorsten-medium (Male, medium quality, faster)
+        - de_DE-thorsten-low (Male, low quality, fastest)
+        """
+        self.voice_name = voice
+        self.sample_rate = 22050  # Piper default
+
+        # Download voice if not exists
+        voices_dir = os.path.expanduser("~/.local/share/piper-tts/voices")
+        os.makedirs(voices_dir, exist_ok=True)
+
+        voice_path = os.path.join(voices_dir, f"{voice}.onnx")
+        config_path = os.path.join(voices_dir, f"{voice}.onnx.json")
+
+        # Download voice files if missing
+        if not os.path.exists(voice_path) or not os.path.exists(config_path):
+            logger.info(f"Downloading Piper voice: {voice}...")
+            try:
+                base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/thorsten/high"
+
+                if not os.path.exists(voice_path):
+                    logger.info("Downloading voice model...")
+                    urllib.request.urlretrieve(
+                        f"{base_url}/de_DE-thorsten-high.onnx",
+                        voice_path
+                    )
+
+                if not os.path.exists(config_path):
+                    logger.info("Downloading voice config...")
+                    urllib.request.urlretrieve(
+                        f"{base_url}/de_DE-thorsten-high.onnx.json",
+                        config_path
+                    )
+
+                logger.success(f"Voice downloaded: {voice}")
+            except Exception as e:
+                logger.error(f"Failed to download voice: {e}")
+                raise
+
+        try:
+            # Load Piper voice
+            self.voice = PiperVoice.load(voice_path, config_path=config_path)
+            logger.success(f"Piper TTS initialized (voice: {voice})")
+        except Exception as e:
+            logger.error(f"Failed to load Piper voice: {e}")
+            raise
+
+    def speak(self, text: str) -> bytes:
+        """Convert text to audio (returns raw PCM bytes)"""
+        try:
+            logger.debug(f"Generating speech: {text[:50]}...")
+
+            # Synthesize audio
+            audio_bytes = io.BytesIO()
+            wav_file = wave.open(audio_bytes, 'wb')
+
+            # Configure WAV file BEFORE synthesizing
+            wav_file.setnchannels(1)  # Mono
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(self.sample_rate)  # 22050 Hz
+
+            # Synthesize
+            self.voice.synthesize(text, wav_file)
+            wav_file.close()
+
+            # Get raw audio data (without WAV header)
+            audio_bytes.seek(0)
+            wav_data = audio_bytes.read()
+
+            # Strip WAV header (44 bytes) for raw PCM
+            if len(wav_data) > 44:
+                audio_pcm = wav_data[44:]
+                logger.debug(f"Generated {len(audio_pcm)} bytes of audio")
+                return audio_pcm
+            else:
+                logger.warning(f"Audio too short: {len(wav_data)} bytes")
+                return wav_data
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    async def _generate_audio(self, text: str) -> bytes:
+        """Generate audio (compatibility method for async calls)"""
+        return self.speak(text)
+
+    def speak_stream(self, text: str):
+        """Stream audio generation (sentence by sentence)"""
+        try:
+            logger.debug(f"Streaming speech: {text[:50]}...")
+
+            # Split into sentences for streaming
+            sentences = []
+            current = ""
+            for char in text:
+                current += char
+                if char in '.!?':
+                    sentences.append(current.strip())
+                    current = ""
+            if current.strip():
+                sentences.append(current.strip())
+
+            # Generate and yield each sentence
+            for sentence in sentences:
+                audio = self.speak(sentence)
+                if audio:
+                    yield audio
+
+        except Exception as e:
+            logger.error(f"TTS streaming error: {e}")
