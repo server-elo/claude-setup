@@ -1,0 +1,6 @@
+#!/bin/bash
+# Sofia MAXPOWER Launcher
+# Runs Sofia with infinite memory (SGMem + PREMem)
+
+cd ~/Desktop/elvi/sofia-pers/sofia-local
+.venv/bin/python agent.py console

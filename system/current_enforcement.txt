@@ -1,0 +1,7 @@
+ACTIVE ENFORCEMENT:
+Patterns detected: COMPLEX_TASK MAX_POWER
+
+Required actions:
+Use TodoWrite tool Dispatch specialist agents Use full 16K token output Launch all relevant agents in parallel
+
+Timestamp: 2025-10-01 15:58:48

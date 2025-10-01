@@ -1,0 +1,147 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channel.cpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/10/01 20:00:00 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "../include/Channel.hpp"
+#include <sstream>
+
+Channel::Channel(const std::string& name)
+    : name(name), user_limit(0), invite_only(false), topic_protected(true)
+{
+}
+
+Channel::~Channel()
+{
+}
+
+// Getters
+std::string Channel::get_name() const { return name; }
+std::string Channel::get_topic() const { return topic; }
+std::string Channel::get_key() const { return key; }
+const std::vector<Client*>& Channel::get_members() const { return members; }
+size_t Channel::get_user_count() const { return members.size(); }
+size_t Channel::get_user_limit() const { return user_limit; }
+bool Channel::is_invite_only() const { return invite_only; }
+bool Channel::is_topic_protected() const { return topic_protected; }
+
+// Setters
+void Channel::set_topic(const std::string& new_topic) { topic = new_topic; }
+void Channel::set_key(const std::string& new_key) { key = new_key; }
+void Channel::set_user_limit(size_t limit) { user_limit = limit; }
+void Channel::set_invite_only(bool value) { invite_only = value; }
+void Channel::set_topic_protected(bool value) { topic_protected = value; }
+
+// Member management
+void Channel::add_member(Client* client)
+{
+    if (!has_member(client))
+        members.push_back(client);
+}
+
+void Channel::remove_member(Client* client)
+{
+    std::vector<Client*>::iterator it = std::find(members.begin(), members.end(), client);
+    if (it != members.end())
+        members.erase(it);
+
+    // Also remove from operators if they are one
+    remove_operator(client);
+}
+
+bool Channel::has_member(Client* client) const
+{
+    return std::find(members.begin(), members.end(), client) != members.end();
+}
+
+// Operator management
+void Channel::add_operator(Client* client)
+{
+    if (!is_operator(client))
+        operators.push_back(client);
+}
+
+void Channel::remove_operator(Client* client)
+{
+    std::vector<Client*>::iterator it = std::find(operators.begin(), operators.end(), client);
+    if (it != operators.end())
+        operators.erase(it);
+}
+
+bool Channel::is_operator(Client* client) const
+{
+    return std::find(operators.begin(), operators.end(), client) != operators.end();
+}
+
+// Invite management
+void Channel::add_invite(Client* client)
+{
+    if (!is_invited(client))
+        invited.push_back(client);
+}
+
+void Channel::remove_invite(Client* client)
+{
+    std::vector<Client*>::iterator it = std::find(invited.begin(), invited.end(), client);
+    if (it != invited.end())
+        invited.erase(it);
+}
+
+bool Channel::is_invited(Client* client) const
+{
+    return std::find(invited.begin(), invited.end(), client) != invited.end();
+}
+
+// Broadcasting
+void Channel::broadcast(const std::string& message, Client* except)
+{
+    for (size_t i = 0; i < members.size(); i++)
+    {
+        if (members[i] != except)
+            members[i]->send_message(message);
+    }
+}
+
+// Get modes string (+nt, +i, etc)
+std::string Channel::get_modes() const
+{
+    std::string modes = "+";
+
+    if (invite_only)
+        modes += "i";
+    if (topic_protected)
+        modes += "t";
+    if (!key.empty())
+        modes += "k";
+    if (user_limit > 0)
+        modes += "l";
+
+    return modes;
+}
+
+// Get user list for NAMES command
+std::string Channel::get_names_list() const
+{
+    std::string names;
+
+    for (size_t i = 0; i < members.size(); i++)
+    {
+        if (i > 0)
+            names += " ";
+
+        // Prefix operators with @
+        if (is_operator(members[i]))
+            names += "@";
+
+        names += members[i]->get_nickname();
+    }
+
+    return names;
+}

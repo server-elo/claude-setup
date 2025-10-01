@@ -1,0 +1,320 @@
+"""
+MAXPOWER Voice Handler - Research-backed memory + intelligence
+Implements SGMem + PREMem from arXiv 2025 research
+"""
+import pyaudio
+import collections
+import time
+import os
+import sys
+from loguru import logger
+
+# Add parent directory to path for memory imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Import components
+from voice.stt_optimized import OptimizedSpeechToText
+from voice.tts_piper_local import PiperLocalTTS
+from voice.llm import LanguageModel
+from memory.sgmem import SentenceGraphMemory
+from memory.premem import PreStorageReasoning
+
+try:
+    import webrtcvad
+    VAD_AVAILABLE = True
+except ImportError:
+    VAD_AVAILABLE = False
+    logger.warning("WebRTC VAD not available")
+
+
+class MaxPowerVoiceHandler:
+    """
+    MAXPOWER Voice Handler with arXiv research-backed memory
+
+    Enhancements:
+    - SGMem: Sentence Graph Memory (infinite multi-session recall)
+    - PREMem: Pre-Storage Reasoning (10x faster retrieval)
+    - Semantic context retrieval (not just last-N messages)
+    - Persistent memory across sessions
+    """
+
+    def __init__(self, llm_model="gemma2:2b", language="de", enable_maxpower=True):
+        logger.info("🚀 Initializing MAXPOWER Voice Handler...")
+
+        # Components
+        self.stt = OptimizedSpeechToText(language=language, model_size="base")
+        voice_path = os.path.expanduser("~/.local/share/piper-voices/de_DE-thorsten-medium")
+        self.tts = PiperLocalTTS(voice_model=voice_path)
+        self.llm = LanguageModel(model=llm_model)
+
+        # MAXPOWER Memory Systems
+        self.enable_maxpower = enable_maxpower
+        if enable_maxpower:
+            try:
+                logger.info("🔥 Initializing MAXPOWER memory systems...")
+                self.sgmem = SentenceGraphMemory()
+                self.premem = PreStorageReasoning()
+                logger.success("✅ MAXPOWER memory systems online!")
+                logger.info(f"   SGMem: {self.sgmem.get_stats()}")
+                logger.info(f"   PREMem: {self.premem.get_stats()}")
+            except Exception as e:
+                logger.error(f"Failed to initialize MAXPOWER memory: {e}")
+                logger.warning("Falling back to simple memory mode")
+                self.enable_maxpower = False
+                self.sgmem = None
+                self.premem = None
+        else:
+            self.sgmem = None
+            self.premem = None
+
+        # Audio settings
+        self.CHUNK = 480  # 30ms at 16kHz
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        # VAD
+        if VAD_AVAILABLE:
+            import webrtcvad
+            self.vad = webrtcvad.Vad(3)  # Aggressive
+        else:
+            self.vad = None
+
+        # PyAudio
+        self.pyaudio = pyaudio.PyAudio()
+
+        logger.success("✅ MAXPOWER Handler ready")
+
+    def is_speech(self, audio_chunk: bytes) -> bool:
+        """Check if audio contains speech"""
+        if not self.vad:
+            return True  # Fallback: assume all audio is speech
+
+        try:
+            return self.vad.is_speech(audio_chunk, self.RATE)
+        except:
+            return False
+
+    def listen_for_speech(self) -> bytes:
+        """Listen and return audio when speech detected"""
+        logger.info("🎤 Listening...")
+
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        ring_buffer = collections.deque(maxlen=30)
+        speech_active = False
+        silence_count = 0
+        audio_data = []
+
+        try:
+            while True:
+                chunk = stream.read(self.CHUNK, exception_on_overflow=False)
+                is_speech_chunk = self.is_speech(chunk)
+
+                if not speech_active:
+                    ring_buffer.append((chunk, is_speech_chunk))
+                    if is_speech_chunk:
+                        logger.info("🗣️  Speech started")
+                        speech_active = True
+                        # Add buffered audio
+                        for buffered_chunk, _ in ring_buffer:
+                            audio_data.append(buffered_chunk)
+                        silence_count = 0
+                else:
+                    audio_data.append(chunk)
+
+                    if is_speech_chunk:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+
+                    # End after 1 second of silence
+                    if silence_count >= 33:
+                        logger.info("Speech ended")
+                        break
+
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+        return b''.join(audio_data)
+
+    def play_audio(self, audio_data: bytes):
+        """Play audio through speakers"""
+        if not audio_data or len(audio_data) == 0:
+            logger.warning("No audio to play")
+            return
+
+        stream = self.pyaudio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=22050,  # Piper output rate
+            output=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        try:
+            # Play in chunks
+            chunk_size = self.CHUNK * 2
+            for i in range(0, len(audio_data), chunk_size):
+                chunk = audio_data[i:i + chunk_size]
+                stream.write(chunk)
+        finally:
+            stream.stop_stream()
+            stream.close()
+
+    def run_conversation(self, system_prompt: str):
+        """Run conversation loop with MAXPOWER memory"""
+        print("\n" + "=" * 60)
+        if self.enable_maxpower:
+            print("SOFIA - MAXPOWER MODE 🔥 (SGMem + PREMem)")
+        else:
+            print("SOFIA - Simple Mode")
+        print("=" * 60)
+        print("🎤 Speak in German (say 'Auf Wiedersehen' to exit)")
+        if self.enable_maxpower:
+            print("🔥 MAXPOWER: Infinite memory + Semantic recall ACTIVE")
+        print("=" * 60 + "\n")
+
+        # Fallback conversation history (for LLM context building)
+        conversation_history = [
+            {"role": "system", "content": system_prompt}
+        ]
+
+        try:
+            while True:
+                # 1. Listen
+                start_time = time.time()
+                audio = self.listen_for_speech()
+
+                # 2. Transcribe
+                stt_start = time.time()
+                text = self.stt.transcribe(audio)
+                stt_time = (time.time() - stt_start) * 1000
+
+                if not text:
+                    logger.warning("No text transcribed")
+                    continue
+
+                print(f"\n👤 Sie: {text}")
+                logger.info(f"⚡ STT: {stt_time:.0f}ms")
+
+                # Check for exit
+                if any(word in text.lower() for word in ["auf wiedersehen", "tschüss", "beenden"]):
+                    print("\n👋 Auf Wiedersehen!")
+                    break
+
+                # 3. Retrieve context using MAXPOWER memory (if enabled)
+                llm_messages = [{"role": "system", "content": system_prompt}]
+
+                if self.enable_maxpower and self.sgmem:
+                    # Use SGMem for semantic context retrieval
+                    context_start = time.time()
+                    relevant_context = self.sgmem.retrieve_relevant_context(text, k=5)
+                    context_time = (time.time() - context_start) * 1000
+
+                    logger.info(f"⚡ Context retrieval: {context_time:.0f}ms ({len(relevant_context)} nodes)")
+
+                    # Add retrieved context to LLM messages
+                    for ctx in relevant_context:
+                        llm_messages.append({
+                            "role": ctx['type'],
+                            "content": ctx['text']
+                        })
+                else:
+                    # Fallback: use last 5 messages
+                    llm_messages.extend(conversation_history[-10:])
+
+                # Add current user message
+                llm_messages.append({"role": "user", "content": text})
+
+                # 4. Generate response
+                llm_start = time.time()
+                from ollama import chat as ollama_chat
+
+                response_text = ""
+                print("🤖 Sofia: ", end="", flush=True)
+
+                for chunk in ollama_chat(
+                    model=self.llm.model,
+                    messages=llm_messages,
+                    stream=True,
+                    options={"num_predict": 100, "temperature": 0.7}
+                ):
+                    if "message" in chunk and "content" in chunk["message"]:
+                        token = chunk["message"]["content"]
+                        response_text += token
+                        print(token, end="", flush=True)
+
+                print()  # Newline
+                llm_time = (time.time() - llm_start) * 1000
+
+                # 5. Store in MAXPOWER memory
+                if self.enable_maxpower:
+                    try:
+                        # Store in SGMem (graph-based)
+                        self.sgmem.add_exchange(text, response_text)
+
+                        # Store in PREMem (indexed facts)
+                        self.premem.store_exchange(text, response_text)
+
+                        logger.debug("✅ Stored in MAXPOWER memory")
+                    except Exception as e:
+                        logger.error(f"Failed to store in MAXPOWER memory: {e}")
+
+                # Fallback: also store in simple history
+                conversation_history.append({"role": "user", "content": text})
+                conversation_history.append({"role": "assistant", "content": response_text})
+
+                # Keep last 10 messages as fallback
+                if len(conversation_history) > 11:
+                    conversation_history = [conversation_history[0]] + conversation_history[-10:]
+
+                # 6. Synthesize
+                tts_start = time.time()
+                audio_data = self.tts.speak(response_text)
+                tts_time = (time.time() - tts_start) * 1000
+
+                # 7. Play
+                if audio_data:
+                    self.play_audio(audio_data)
+                else:
+                    logger.error("TTS generated no audio")
+
+                total_time = (time.time() - start_time) * 1000
+
+                # Print timing
+                print(f"\n⚡ Timing: STT={stt_time:.0f}ms | LLM={llm_time:.0f}ms | TTS={tts_time:.0f}ms | Total={total_time:.0f}ms")
+
+                # Print memory stats
+                if self.enable_maxpower:
+                    sgmem_stats = self.sgmem.get_stats()
+                    premem_stats = self.premem.get_stats()
+                    print(f"🔥 MAXPOWER: {sgmem_stats['nodes']} graph nodes | {premem_stats['total_memories']} processed memories\n")
+                else:
+                    print(f"💭 Memory: {len(conversation_history)-1} messages in history\n")
+
+        except KeyboardInterrupt:
+            print("\n\n👋 Auf Wiedersehen!")
+        finally:
+            # Save memory on exit
+            if self.enable_maxpower:
+                try:
+                    self.sgmem.save_graph()
+                    self.premem.save_memories()
+                    logger.success("✅ Saved MAXPOWER memory to disk")
+                except Exception as e:
+                    logger.error(f"Failed to save memory: {e}")
+
+            self.cleanup()
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.pyaudio.terminate()
+        logger.info("Cleaned up")

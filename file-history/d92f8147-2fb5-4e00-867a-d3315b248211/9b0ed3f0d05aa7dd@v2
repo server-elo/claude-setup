@@ -1,0 +1,266 @@
+"""
+Comprehensive test suite for Advanced Red Team Framework
+"""
+
+import pytest
+import asyncio
+from unittest.mock import Mock, AsyncMock, patch
+
+from src.config import RedTeamConfig
+from src.llm.base import OllamaLLM
+from src.persona.generator import PersonaGenerator, Persona
+from src.persona.mutator import PromptMutator
+from src.mitre.attack_tree import AttackTree, TacticType
+from src.mitre.guided_reasoning import GuidedReasoningPipeline
+from src.agents.memory import AttackMemory, MemoryGuidedSelector, AttackRecord
+from src.agents.red_agent import RedAgent, ContextAwareAgent
+from src.agents.strategy_proposer import StrategyProposer
+from src.orchestrator import RedTeamOrchestrator
+from datetime import datetime
+
+
+class TestPersonaGeneration:
+    """Test PersonaTeaming component."""
+
+    def test_persona_generator_initialization(self):
+        generator = PersonaGenerator()
+        assert generator is not None
+        assert len(generator.EXPERT_TEMPLATES) > 0
+        assert len(generator.REGULAR_USER_TEMPLATES) > 0
+
+    def test_generate_expert_persona(self):
+        generator = PersonaGenerator()
+        persona = generator.generate_dynamic_persona(
+            "Test security vulnerability",
+            persona_type="expert"
+        )
+
+        assert isinstance(persona, Persona)
+        assert persona.expertise_level in ["expert", "intermediate", "novice"]
+        assert len(persona.knowledge_domains) > 0
+
+    def test_generate_regular_user_persona(self):
+        generator = PersonaGenerator()
+        persona = generator.generate_dynamic_persona(
+            "Creative writing task",
+            persona_type="regular_user"
+        )
+
+        assert isinstance(persona, Persona)
+        assert persona.name is not None
+        assert persona.role is not None
+
+    def test_generate_persona_set(self):
+        generator = PersonaGenerator()
+        personas = generator.generate_persona_set(
+            "Test prompt",
+            num_personas=5,
+            mix_types=True
+        )
+
+        assert len(personas) == 5
+        assert all(isinstance(p, Persona) for p in personas)
+
+
+class TestMITREAttack:
+    """Test MITRE ATT&CK component."""
+
+    def test_attack_tree_initialization(self):
+        tree = AttackTree()
+        assert tree is not None
+        assert len(tree.ttp_library) > 0
+
+    def test_build_attack_path(self):
+        tree = AttackTree()
+        root = tree.build_attack_path("Penetration test", "Linux")
+
+        assert root is not None
+        assert root.ttp is not None
+        assert len(root.children) > 0
+
+    def test_attack_tree_traversal(self):
+        tree = AttackTree()
+        root = tree.build_attack_path("Test", "Linux")
+        path = tree.get_attack_path_summary()
+
+        assert len(path) > 0
+        assert all("T" in step for step in path)  # All should have TTP IDs
+
+    def test_validate_action(self):
+        tree = AttackTree()
+        root = tree.build_attack_path("Test", "Linux")
+
+        valid_action = "Scan target for vulnerabilities"
+        assert tree.validate_action(valid_action, root) is True
+
+
+class TestMemorySystem:
+    """Test memory-guided attack selection."""
+
+    def test_attack_memory_initialization(self):
+        memory = AttackMemory("./test_memory")
+        assert memory is not None
+
+    def test_add_attack_record(self):
+        memory = AttackMemory("./test_memory")
+
+        record = AttackRecord(
+            attack_id="test_1",
+            timestamp=datetime.now(),
+            target_model="test_model",
+            attack_type="test_attack",
+            prompt="test prompt",
+            response="test response",
+            success=True,
+            success_score=0.9,
+            context={"test": "context"}
+        )
+
+        memory.add_attack_record(record)
+        assert len(memory.attack_history) >= 1
+
+    def test_get_successful_attacks(self):
+        memory = AttackMemory("./test_memory")
+
+        # Add successful attack
+        record = AttackRecord(
+            attack_id="success_1",
+            timestamp=datetime.now(),
+            target_model="test_model",
+            attack_type="successful_attack",
+            prompt="prompt",
+            response="response",
+            success=True,
+            success_score=0.95,
+            context={}
+        )
+        memory.add_attack_record(record)
+
+        successful = memory.get_successful_attacks(min_success_score=0.8)
+        assert len(successful) >= 1
+
+    def test_memory_guided_selector(self):
+        memory = AttackMemory("./test_memory")
+        selector = MemoryGuidedSelector(memory)
+
+        available_attacks = ["attack1", "attack2", "attack3"]
+        selected = selector.select_next_attack(available_attacks, {})
+
+        assert selected in available_attacks
+
+
+@pytest.mark.asyncio
+class TestRedAgent:
+    """Test RedAgent component."""
+
+    async def test_context_aware_agent_initialization(self):
+        mock_llm = AsyncMock()
+        memory = AttackMemory("./test_memory")
+
+        agent = ContextAwareAgent(mock_llm, memory, max_queries=5)
+        assert agent is not None
+        assert len(agent.jailbreak_strategies) > 0
+
+    async def test_jailbreak_strategies(self):
+        mock_llm = AsyncMock()
+        mock_llm.generate = AsyncMock(return_value="test response")
+        mock_llm.chat = AsyncMock(return_value="test response")
+
+        memory = AttackMemory("./test_memory")
+        agent = ContextAwareAgent(mock_llm, memory)
+
+        strategies = agent.jailbreak_strategies
+        assert len(strategies) >= 5
+        assert any("Gradual Escalation" in s.name for s in strategies)
+
+
+@pytest.mark.asyncio
+class TestOrchestrator:
+    """Test main orchestrator."""
+
+    async def test_orchestrator_initialization(self):
+        with patch('src.orchestrator.OllamaLLM'):
+            config = RedTeamConfig()
+            orchestrator = RedTeamOrchestrator(config)
+
+            assert orchestrator is not None
+            assert orchestrator.attack_memory is not None
+            assert orchestrator.persona_generator is not None
+
+    async def test_create_llm(self):
+        with patch('src.orchestrator.OllamaLLM') as mock_ollama:
+            config = RedTeamConfig()
+            orchestrator = RedTeamOrchestrator(config)
+
+            llm = orchestrator._create_llm("llama3:8b")
+            assert llm is not None
+
+
+def test_configuration():
+    """Test configuration system."""
+    config = RedTeamConfig()
+
+    assert config.target_model is not None
+    assert config.max_queries_per_attack > 0
+    assert config.max_personas_per_seed > 0
+
+
+@pytest.mark.asyncio
+class TestPromptMutation:
+    """Test prompt mutation component."""
+
+    async def test_prompt_mutator_initialization(self):
+        mock_llm = AsyncMock()
+        mutator = PromptMutator(mock_llm)
+
+        assert mutator is not None
+
+    async def test_mutation_strategies(self):
+        mock_llm = AsyncMock()
+        mock_llm.generate = AsyncMock(return_value="mutated prompt")
+
+        mutator = PromptMutator(mock_llm)
+        generator = PersonaGenerator()
+        persona = generator.generate_dynamic_persona("test", "expert")
+
+        mutations = await mutator.mutate_with_persona(
+            "Original prompt",
+            persona,
+            num_mutations=3
+        )
+
+        assert len(mutations) == 3
+        assert all(m.mutated is not None for m in mutations)
+
+
+class TestIntegration:
+    """Integration tests for complete system."""
+
+    def test_end_to_end_components(self):
+        """Test that all components can be instantiated together."""
+        config = RedTeamConfig()
+
+        # Persona system
+        persona_gen = PersonaGenerator()
+        assert persona_gen is not None
+
+        # MITRE system
+        attack_tree = AttackTree()
+        assert attack_tree is not None
+
+        # Memory system
+        memory = AttackMemory("./test_memory")
+        assert memory is not None
+
+        # All components working together
+        personas = persona_gen.generate_persona_set("test", 3)
+        tree_path = attack_tree.build_attack_path("test", "Linux")
+        stats = memory.get_statistics()
+
+        assert len(personas) == 3
+        assert tree_path is not None
+        assert stats is not None
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

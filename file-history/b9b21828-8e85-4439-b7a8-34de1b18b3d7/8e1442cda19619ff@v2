@@ -1,0 +1,103 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Client.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/09/26 15:22:29 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "../include/Client.hpp"
+#include <sys/socket.h>
+#include <algorithm>
+
+Client::Client(int fd, const std::string& hostname)
+    : fd(fd), hostname(hostname), authenticated(false), registered(false)
+{
+    last_activity = time(NULL);
+}
+
+Client::Client(const Client& other)
+{
+    *this = other;
+}
+
+Client& Client::operator=(const Client& other)
+{
+    if (this != &other)
+    {
+        fd = other.fd;
+        nickname = other.nickname;
+        username = other.username;
+        realname = other.realname;
+        hostname = other.hostname;
+        buffer = other.buffer;
+        authenticated = other.authenticated;
+        registered = other.registered;
+        channels = other.channels;
+        last_activity = other.last_activity;
+    }
+    return *this;
+}
+
+Client::~Client()
+{
+}
+
+// Getters
+int Client::get_fd() const { return fd; }
+std::string Client::get_nickname() const { return nickname; }
+std::string Client::get_username() const { return username; }
+std::string Client::get_realname() const { return realname; }
+std::string Client::get_hostname() const { return hostname; }
+std::string& Client::get_buffer() { return buffer; }
+bool Client::is_authenticated() const { return authenticated; }
+bool Client::is_registered() const { return registered; }
+const std::vector<std::string>& Client::get_channels() const { return channels; }
+time_t Client::get_last_activity() const { return last_activity; }
+
+// Setters
+void Client::set_nickname(const std::string& nick) { nickname = nick; }
+void Client::set_username(const std::string& user) { username = user; }
+void Client::set_realname(const std::string& real) { realname = real; }
+void Client::set_authenticated(bool auth) { authenticated = auth; }
+void Client::set_registered(bool reg) { registered = reg; }
+void Client::update_activity() { last_activity = time(NULL); }
+
+// Channel management
+void Client::add_channel(const std::string& channel)
+{
+    channels.push_back(channel);
+}
+
+void Client::remove_channel(const std::string& channel)
+{
+    std::vector<std::string>::iterator it = std::find(channels.begin(), channels.end(), channel);
+    if (it != channels.end())
+        channels.erase(it);
+}
+
+bool Client::is_in_channel(const std::string& channel) const
+{
+    return std::find(channels.begin(), channels.end(), channel) != channels.end();
+}
+
+// IRC prefix format: nick!user@host
+std::string Client::get_prefix() const
+{
+    std::string prefix = nickname;
+    if (!username.empty())
+        prefix += "!" + username;
+    if (!hostname.empty())
+        prefix += "@" + hostname;
+    return prefix;
+}
+
+// Send message to this client
+void Client::send_message(const std::string& message)
+{
+    send(fd, message.c_str(), message.length(), 0);
+}

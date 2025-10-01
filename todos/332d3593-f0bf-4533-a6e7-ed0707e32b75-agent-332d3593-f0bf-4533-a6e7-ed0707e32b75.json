@@ -25,6 +25,11 @@
     "activeForm": "Creating MAXPOWER completion summary"
   },
   {
+    "content": "Integrate and run MAXPOWER Sofia system",
+    "status": "completed",
+    "activeForm": "Integrating and running MAXPOWER Sofia"
+  },
+  {
     "content": "Implement Silero noise-robust VAD",
     "status": "pending",
     "activeForm": "Implementing Silero VAD"
@@ -33,10 +38,5 @@
     "content": "Test wav2vec2-german vs faster-whisper accuracy",
     "status": "pending",
     "activeForm": "Testing wav2vec2-german ASR"
-  },
-  {
-    "content": "Benchmark complete MAXPOWER system end-to-end",
-    "status": "pending",
-    "activeForm": "Benchmarking MAXPOWER system"
   }
 ]

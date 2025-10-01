@@ -1,0 +1,66 @@
+NAME = ircserv
+
+CXX = c++
+
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -I$(INC_DIR)
+
+# Folders
+SRC_DIR = src
+OBJ_DIR = obj
+INC_DIR = include
+
+# Source files
+SRCS = $(SRC_DIR)/main.cpp \
+       $(SRC_DIR)/Server.cpp \
+       $(SRC_DIR)/Client.cpp \
+       $(SRC_DIR)/Channel.cpp \
+       $(SRC_DIR)/IRCMessage.cpp
+
+# Object files
+OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+
+# Colors for pretty output
+GREEN = \033[0;32m
+YELLOW = \033[0;33m
+RED = \033[0;31m
+NC = \033[0m # No Color
+
+all: $(NAME)
+	@echo "$(GREEN)✓ Build complete!$(NC)"
+	@echo "$(YELLOW)Usage: ./$(NAME) <port> <password>$(NC)"
+	@echo "$(YELLOW)Example: ./$(NAME) 6667 mypass123$(NC)"
+
+$(NAME): $(OBJS)
+	@echo "$(YELLOW)Linking $(NAME)...$(NC)"
+	@$(CXX) $(CXXFLAGS) -o $@ $^
+	@echo "$(GREEN)✓ $(NAME) created$(NC)"
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJ_DIR):
+	@mkdir -p $(OBJ_DIR)
+
+clean:
+	@echo "$(RED)Cleaning object files...$(NC)"
+	@rm -rf $(OBJ_DIR)
+	@echo "$(GREEN)✓ Clean complete$(NC)"
+
+fclean: clean
+	@echo "$(RED)Removing $(NAME)...$(NC)"
+	@rm -f $(NAME)
+	@echo "$(GREEN)✓ Full clean complete$(NC)"
+
+re: fclean all
+
+# Testing targets
+test: $(NAME)
+	@echo "$(YELLOW)Starting test server on port 6667...$(NC)"
+	@./$(NAME) 6667 test123
+
+# Check if code compiles
+check: $(OBJS)
+	@echo "$(GREEN)✓ Compilation check passed$(NC)"
+
+.PHONY: all clean fclean re test check

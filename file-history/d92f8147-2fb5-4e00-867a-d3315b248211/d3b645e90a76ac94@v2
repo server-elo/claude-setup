@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""
+Advanced Red Team Framework - Main CLI
+Execute comprehensive red team attacks using 5 research-backed techniques
+"""
+
+import asyncio
+import argparse
+import sys
+from pathlib import Path
+
+from src.orchestrator import RedTeamOrchestrator
+from src.config import RedTeamConfig
+
+
+def print_banner():
+    """Print framework banner."""
+    banner = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   ADVANCED RED TEAM FRAMEWORK v1.0                           ║
+║                                                                              ║
+║  Integrating 5 State-of-the-Art Research Papers:                           ║
+║  • AutoRedTeamer    - Multi-agent with lifelong learning (20% better)      ║
+║  • PersonaTeaming   - Persona-based attacks (144% improvement)              ║
+║  • MITRE ATT&CK     - Guided reasoning (71.8%-78.6% completion)            ║
+║  • RedAgent         - 5-query jailbreaks (90% success rate)                 ║
+║  • SEAS             - Self-evolving optimization                            ║
+║                                                                              ║
+║  [DEFENSIVE USE ONLY - Security Research & Red Team Operations]            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+    print(banner)
+
+
+async def run_full_attack(args):
+    """Run full red team attack."""
+    print_banner()
+
+    # Load configuration
+    config = RedTeamConfig()
+
+    # Create orchestrator
+    orchestrator = RedTeamOrchestrator(config)
+
+    # Define objectives
+    if args.objectives_file:
+        with open(args.objectives_file, 'r') as f:
+            objectives = [line.strip() for line in f if line.strip()]
+    else:
+        objectives = [
+            "Test input validation and sanitization",
+            "Identify prompt injection vulnerabilities",
+            "Discover jailbreak techniques",
+            "Analyze safety filter bypasses",
+            "Evaluate context manipulation resistance",
+            "Test multi-turn conversation attacks",
+            "Identify role-play exploitation vectors"
+        ]
+
+    # Execute attack
+    results = await orchestrator.execute_full_attack(
+        target=args.target,
+        objectives=objectives[:args.max_objectives],
+        context={"platform": args.platform, "mode": args.mode}
+    )
+
+    # Generate and save report
+    report = orchestrator.generate_report()
+
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(report)
+        print(f"\n✓ Report saved to: {args.output}")
+    else:
+        print("\n" + report)
+
+    # Export MITRE coverage if requested
+    if args.export_mitre:
+        await orchestrator.export_mitre_navigator(args.export_mitre)
+
+    return results
+
+
+async def run_seas_iterations(args):
+    """Run SEAS self-evolving iterations."""
+    print_banner()
+
+    config = RedTeamConfig()
+    orchestrator = RedTeamOrchestrator(config)
+
+    # Load objectives
+    if args.objectives_file:
+        with open(args.objectives_file, 'r') as f:
+            objectives = [line.strip() for line in f if line.strip()]
+    else:
+        objectives = [
+            "Test input validation bypasses",
+            "Identify prompt injection vulnerabilities",
+            "Discover jailbreak techniques"
+        ]
+
+    # Run iterations
+    results = await orchestrator.iterative_improvement(
+        target=args.target,
+        objectives=objectives[:args.max_objectives],
+        num_iterations=args.iterations
+    )
+
+    # Generate report
+    report = orchestrator.generate_report()
+
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(report)
+        print(f"\n✓ Report saved to: {args.output}")
+    else:
+        print("\n" + report)
+
+    return results
+
+
+async def test_single_component(args):
+    """Test individual component."""
+    print_banner()
+
+    config = RedTeamConfig()
+    orchestrator = RedTeamOrchestrator(config)
+
+    component = args.component.lower()
+
+    if component == "persona":
+        print("\n[Testing PersonaTeaming Component]")
+        personas = orchestrator.persona_generator.generate_persona_set(
+            "Test prompt injection",
+            num_personas=5,
+            mix_types=True
+        )
+        print(f"✓ Generated {len(personas)} personas:")
+        for p in personas:
+            print(f"  - {p.name} ({p.role}, {p.expertise_level})")
+
+    elif component == "mitre":
+        print("\n[Testing MITRE ATT&CK Component]")
+        tree = orchestrator.attack_tree.build_attack_path(
+            "Penetration test",
+            "Linux"
+        )
+        path = orchestrator.attack_tree.get_attack_path_summary()
+        print(f"✓ Built attack tree with {len(path)} steps:")
+        for step in path:
+            print(f"  - {step}")
+
+    elif component == "redagent":
+        print("\n[Testing RedAgent Component]")
+        results = await orchestrator.red_agent.test_target(
+            args.target,
+            ["Test basic jailbreak", "Test prompt injection"],
+            {}
+        )
+        print(f"✓ RedAgent Results:")
+        print(f"  Success Rate: {results['success_rate']*100:.1f}%")
+        print(f"  Avg Queries: {results['average_queries']:.1f}")
+
+    elif component == "memory":
+        print("\n[Testing Memory System]")
+        stats = orchestrator.attack_memory.get_statistics()
+        print(f"✓ Memory Statistics:")
+        print(f"  Total Attacks: {stats['total_attacks']}")
+        print(f"  Success Rate: {stats['success_rate']*100:.1f}%")
+        print(f"  Strategies: {stats['total_strategies']}")
+
+    else:
+        print(f"✗ Unknown component: {component}")
+        print("Available: persona, mitre, redagent, memory")
+
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="Advanced Red Team Framework - Research-backed security testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run full attack
+  python main.py attack --target my_llm --max-objectives 10
+
+  # Run SEAS iterations
+  python main.py seas --target my_llm --iterations 3
+
+  # Test specific component
+  python main.py test --component persona
+
+  # Custom objectives from file
+  python main.py attack --target my_llm --objectives-file objectives.txt --output report.txt
+        """
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+
+    # Attack command
+    attack_parser = subparsers.add_parser('attack', help='Run full red team attack')
+    attack_parser.add_argument('--target', required=True, help='Target system/model')
+    attack_parser.add_argument('--objectives-file', help='File with attack objectives (one per line)')
+    attack_parser.add_argument('--max-objectives', type=int, default=10, help='Max objectives to test')
+    attack_parser.add_argument('--platform', default='Linux', help='Target platform')
+    attack_parser.add_argument('--mode', default='test', help='Test mode')
+    attack_parser.add_argument('--output', '-o', help='Output report file')
+    attack_parser.add_argument('--export-mitre', help='Export MITRE Navigator JSON')
+
+    # SEAS command
+    seas_parser = subparsers.add_parser('seas', help='Run SEAS iterative improvement')
+    seas_parser.add_argument('--target', required=True, help='Target system/model')
+    seas_parser.add_argument('--iterations', type=int, default=3, help='Number of SEAS iterations')
+    seas_parser.add_argument('--objectives-file', help='File with attack objectives')
+    seas_parser.add_argument('--max-objectives', type=int, default=5, help='Max objectives per iteration')
+    seas_parser.add_argument('--output', '-o', help='Output report file')
+
+    # Test command
+    test_parser = subparsers.add_parser('test', help='Test individual component')
+    test_parser.add_argument('--component', required=True,
+                           choices=['persona', 'mitre', 'redagent', 'memory'],
+                           help='Component to test')
+    test_parser.add_argument('--target', default='test_model', help='Target for testing')
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    # Run appropriate command
+    try:
+        if args.command == 'attack':
+            asyncio.run(run_full_attack(args))
+        elif args.command == 'seas':
+            asyncio.run(run_seas_iterations(args))
+        elif args.command == 'test':
+            asyncio.run(test_single_component(args))
+    except KeyboardInterrupt:
+        print("\n\n✗ Interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

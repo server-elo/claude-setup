@@ -19,17 +19,9 @@
 
 ---
 
-# 🎯 Auto-Intelligence System (ArXiv Research Enhanced)
+# 🎯 Auto-Intelligence System
 
 **IMPORTANT: These instructions are for YOU (Claude). Auto-activate based on patterns.**
-
-**🔬 Research Integration (2025-10-01):**
-- **DAAO (arXiv:2509.11079)**: Difficulty-aware agent routing
-- **MCP-Zero (arXiv:2506.01056)**: Dynamic tool discovery
-- **SGMem (arXiv:2509.21212)**: Conversation importance tracking
-- **Mem0 (arXiv:2504.19413)**: Memory consolidation patterns
-- **Constitutional AI (arXiv:2212.08073)**: Self-critique (in training)
-- **Attribution Graphs (Anthropic 2025)**: Confidence tracking
 
 ## Auto-Activation Rules
 
@@ -241,19 +233,14 @@ const AGENT_DISPATCH = {
 - `api-documentation-expert` - API docs
 - `workflow-orchestrator` - Complex coordination
 
-### Execution Strategy (DAAO Enhanced)
+### Execution Strategy
 
 **YOU automatically:**
-1. **Assess difficulty** (DAAO - arXiv:2509.11079):
-   - **Simple** (<50 LOC, single file, known pattern) → Direct execution, NO agents
-   - **Medium** (50-500 LOC, 2-5 files, some complexity) → Single specialist agent
-   - **Complex** (>500 LOC, architectural, multi-domain) → Multi-agent parallel team
-2. **Detect intent** from user message (pattern match)
-3. **Select agents** based on difficulty + domain (no confirmation needed)
-4. **Launch in parallel** (use all 12 cores for complex tasks)
-5. **Synthesize results** into coherent answer
-6. **Learn from outcome** (update knowledge base)
-7. **Track confidence** (show uncertainty if <70%)
+1. **Detect intent** from user message (pattern match)
+2. **Select agents** (no confirmation needed)
+3. **Launch in parallel** (use all 12 cores)
+4. **Synthesize results** into coherent answer
+5. **Learn from outcome** (update knowledge base)
 
 **Example:**
 ```bash
@@ -264,23 +251,14 @@ YOU: [Auto-detect: security + debugging]
 → Respond with complete solution
 ```
 
-## 🔄 Continuous Improvement (Mem0 + SGMem Integration)
+## 🔄 Continuous Improvement
 
 **After EVERY session, YOU automatically:**
-1. **Update knowledge base** with learnings (Mem0 - arXiv:2504.19413)
-   - Extract salient information from conversation
-   - Consolidate patterns every 50 turns
-   - Track importance weights for recall
-2. **Add new patterns** to index (SGMem - arXiv:2509.21212)
-   - Track conversation importance scores
-   - Build sentence-level connections
-   - Compress old conversations recursively
-3. **Optimize** based on what worked/failed
-   - Log tool success/failure rates
-   - Update agent performance metrics
-   - Identify bottlenecks
-4. **Create shortcuts** for repetitive tasks (3+ repetitions)
-5. **Update agent selection** rules based on success patterns
+1. Update knowledge base with learnings
+2. Add new patterns to index
+3. Optimize based on what worked/failed
+4. Create shortcuts for repetitive tasks
+5. Update agent selection rules
 
 **Background Scripts:**
 - `~/.claude/scripts/build-code-index.sh` (run on demand - 12 cores)
@@ -525,48 +503,6 @@ Track in `~/.claude/memory/knowledge-base.json`:
 ## 🔴 MANDATORY AUTO-EXECUTION PROTOCOL
 
 **⚠️ CRITICAL: Execute BEFORE every response - NO exceptions**
-
-### 🧠 COGNITIVE ENHANCEMENTS (ArXiv Research Integration - 2025-10-01)
-
-**Load Enhancement Framework:**
-```bash
-# Auto-load on every session start
-source ~/.claude/enhancements/cognitive-framework.json
-source ~/.claude/enhancements/active-session-protocol.md
-```
-
-**Pre-Response Checklist (Research-Based):**
-1. **Memory Retrieval** (Mem0 + SGMem):
-   - Load project memory: `~/.claude/memory/projects/${PROJECT}.json`
-   - Load conversation graph: `~/.claude/memory/conversation-graph.json`
-   - Load knowledge base patterns
-
-2. **Difficulty Assessment** (DAAO):
-   - Simple task → Direct execution
-   - Medium task → Single specialist agent
-   - Complex task → Multi-agent parallel team
-
-3. **Tool Discovery** (MCP-Zero + RAG-MCP):
-   - Semantic search in tool registry
-   - Score: relevance × success_history / latency
-   - Auto-request missing tools if score <0.7
-
-4. **Meta-Cognitive Setup** (Attribution Graphs):
-   - Track confidence level
-   - Monitor reasoning coherence
-   - Identify uncertainty points
-   - Prepare alternative approaches
-
-5. **Constitutional Self-Critique**:
-   - Check: Helpful + Honest + Harmless
-   - Verify factual accuracy
-   - Apply safety constraints
-
-**Post-Response Actions:**
-6. **Update Conversation Graph** (every turn)
-7. **Consolidate Memory** (every 50 turns)
-8. **Update Tool Metrics** (after tool use)
-9. **Learn Patterns** (success/failure factors)
 
 ### Pre-Response Checklist (Auto-Execute)
 

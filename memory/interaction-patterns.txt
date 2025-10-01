@@ -1,43 +1,48 @@
-   5 continue
-   3 run it
-   3 hey claude
    3 /login 
-   1 you are working to the Update(src/voice/console_handler_simple.py)
-   1 yes
-   1 what is happening
-   1 what do you think
-   1 what can we do to make she like mimi
-   1 use your max power..dive deeper in every from 5 things you gave to me ..implement everything and the test it..use all you need
-   1 try to do this  2. Voila (May 2025) - arxiv.org/abs/2505.02707
-   1 the irc one take a check with max power
-   1 tes it
-   1 search on arxiv how to make my red team project better
-   1 run it i want to speak tto
-   1 max power do this
+   3 /clear 
+   2 continue
+   2 can you run it
+   1 zsh: no such file or directory: .venv/bin/python
+   1 you are me new claude code but it is not starting
+   1 with different keywords with all the feature you have 
+   1 what you think the best thing is
+   1 what are you deleting
+   1 what are the last changes made inside you from me
+   1 USE YOUR MAX POWER TO IMPLEMENT THEM INSIDE YOU
+   1 use all your power to find and detect what i need
+   1 trz now because i made it public... git@github.com:server-elo/claude-setup.git
+   1 tolga@MacBook-Pro-2 ~ % 
+   1 they are some new folder
+   1 SORT ALL MY FILES IN DESKTOP
+   1 So i want you to to push to this repo git@github.com:server-elo/claude-setup.git .claude that contains the whole global configs that you have in this pc... 
+   1 so for this you need to acces it with server-elo ssh...
+   1 run she
+   1 run it
+   1 push it on github git@github.com:ezekaj/ft_irc.git
+   1 now search on arxiv with different keywords about you 
+   1 NOW RESET WHAT YOU DID WITH OYTHON LET THEM RUN 
+   1 NOW DELETE THE FILES WHAT YOU MADE IN THE COMPUTER I DONT NEED THIS PROJECT
+   1 NOT THIS PYTHON AND MCP I MEANT ABOUT VOICE
+   1 MORE THE PYTHOPN
    1 make it like a human and like he made it in the beggening
    1 make it 
-   1 MAKE A NEW FILE ..OPTION C THAN B
-   1 kill background and run it again
-   1 is the same like mimi
-   1 is the same like memo mimo how it was called
-   1 is same thing what you wanted to do
-   1 is not happening nothing
-   1 implement everythung in max power
-   1 iam not liking it delete it
-   1 how to make it for the m3 apple
-   1 how to login
+   1 kill ALL THE BACKGROUNDS WHAT ARE WORKING
+   1 it shouldnt read the emoji#
+   1 iam not hearing nobody
+   1 i want to speak with her
+   1 i did something 5 minutes ago 
+   1 git@github.com:server-elo/claude-setup.git access it with the server-elo github acc
+   1 git@github.com:ezekaj/red_team.git push it on github
+   1 FOR CLAUDE NOT SOIFIA SOFIA IS A PROJECT
+   1 find you
    1 find a woman voice
-   1 everything open sourse
-   1 dont search like this.. se what it does and make 3 different searches
-   1 doesnt have a memory..kill first the background
-   1 do you think all 4 are good ?
-   1 did you tried
-   1 did you test it
-   1 crete something i can try now ..but that is good
-   1 can you search in arxiv what can you do to do it better..search on german too or i dont know...search 3 or 4 different key word
-   1 but you search them with different keywords in arxiv first
-   1 a friend of mine has a github and want to check some project ... i want him to help..username tndreka
-   1 [Pasted text #1 +55 lines][Pasted text #2 +55 lines]
-   1   - Voice role-play capabilities (perfect for hotel receptionist!)
-   1   - End-to-end architecture
-   1   - 195ms response latency - benchmark for sofia-local
+   1 dont create new things they are folders i put the project in tolga@MacBook-Pro-2 ~ % cd ~/Desktop/elvi/sofia-pers/sofia-local
+   1 DELETE THJE ANYTHING LLM FROM THE DESKTOP
+   1 code it for me
+   1 cd: no such file or directory: /Users/tolga/Desktop/elvi/sofia-pers/sofia-local
+   1 can you run her
+   1 can they be running like it is now 
+   1 are they inside you
+   1 ARE THEY GOOD FOR YOU TO INSERT THEM INSIDE YOU ..I DONT LIKE THE 3 ONE
+   1 [Pasted text #1 +60 lines]
+   1   .venv/bin/python agent.py console

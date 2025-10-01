@@ -1,0 +1,433 @@
+# ft_irc Architecture
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     IRC SERVER (ircserv)                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌────────────┐         ┌──────────────┐                  │
+│  │   Server   │◄───────►│ poll_fds[]   │                  │
+│  └────────────┘         └──────────────┘                  │
+│        │                                                   │
+│        │ manages                                           │
+│        ├───────► clients (map<int, Client*>)              │
+│        ├───────► clients_by_nick (map<string, Client*>)   │
+│        └───────► channels (map<string, Channel*>)         │
+│                                                             │
+│  ┌──────────────────────────────────────────────────┐     │
+│  │           IRC Command Handlers                    │     │
+│  ├──────────────────────────────────────────────────┤     │
+│  │ PASS │ NICK │ USER │ JOIN │ PART │ PRIVMSG │... │     │
+│  └──────────────────────────────────────────────────┘     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                       ▲
+                       │ TCP/IP
+                       │ port 6667
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        CLIENTS                               │
+├──────────────────┬──────────────────┬────────────────────────┤
+│   IRC Client 1   │   IRC Client 2   │   IRC Client 3        │
+│   (irssi)        │   (WeeChat)      │   (netcat)            │
+└──────────────────┴──────────────────┴────────────────────────┘
+```
+
+## Class Diagram
+
+```
+┌────────────────────────┐
+│       Server           │
+├────────────────────────┤
+│ - port: int            │
+│ - password: string     │
+│ - listening: int       │
+│ - poll_fds: vector     │
+│ - clients: map         │
+│ - clients_by_nick: map │
+│ - channels: map        │
+├────────────────────────┤
+│ + run_Server()         │
+│ + handle_PASS()        │
+│ + handle_NICK()        │
+│ + handle_JOIN()        │
+│ + ... (15+ handlers)   │
+└────────┬───────────────┘
+         │ manages 1:N
+         ▼
+┌────────────────────────┐
+│       Client           │
+├────────────────────────┤
+│ - fd: int              │
+│ - nickname: string     │
+│ - username: string     │
+│ - hostname: string     │
+│ - authenticated: bool  │
+│ - registered: bool     │
+│ - channels: vector     │
+│ - buffer: string       │
+├────────────────────────┤
+│ + send_message()       │
+│ + get_prefix()         │
+│ + add_channel()        │
+└────────┬───────────────┘
+         │ member of N:M
+         ▼
+┌────────────────────────┐
+│       Channel          │
+├────────────────────────┤
+│ - name: string         │
+│ - topic: string        │
+│ - members: vector      │
+│ - operators: vector    │
+│ - modes: string        │
+│ - key: string          │
+│ - user_limit: size_t   │
+├────────────────────────┤
+│ + add_member()         │
+│ + broadcast()          │
+│ + is_operator()        │
+└────────────────────────┘
+
+┌────────────────────────┐
+│     IRCMessage         │
+├────────────────────────┤
+│ - prefix: string       │
+│ - command: string      │
+│ - params: vector       │
+│ - trailing: string     │
+├────────────────────────┤
+│ + parse()              │
+│ + validate()           │
+└────────────────────────┘
+```
+
+## Message Flow
+
+### 1. Client Connection
+
+```
+Client                      Server                    System
+  │                           │                         │
+  ├─── connect() ────────────►│                         │
+  │                           ├─── accept() ───────────►│
+  │                           │◄────── fd ──────────────┤
+  │                           │                         │
+  │                           ├─ new Client(fd)         │
+  │                           ├─ add to poll_fds        │
+  │                           ├─ add to clients map     │
+  │                           │                         │
+  │◄── Welcome to IRC ────────┤                         │
+```
+
+### 2. Registration Flow
+
+```
+Client                      Server                   State
+  │                           │                        │
+  ├─── PASS password ────────►│                        │
+  │                           ├─ authenticate()        │
+  │                           │   authenticated = true │
+  │                           │                        │
+  ├─── NICK alice ───────────►│                        │
+  │                           ├─ set_nickname()        │
+  │                           ├─ add to clients_by_nick│
+  │                           │                        │
+  ├─── USER alice 0 * :A ────►│                        │
+  │                           ├─ set_username()        │
+  │                           ├─ set_realname()        │
+  │                           ├─ registered = true     │
+  │                           │                        │
+  │◄── 001 Welcome ───────────┤                        │
+  │◄── 002 Your host ─────────┤                        │
+  │◄── 003 Created ───────────┤                        │
+  │◄── 004 MyInfo ────────────┤                        │
+```
+
+### 3. Channel Join
+
+```
+Client A                 Server                   Channel
+  │                        │                         │
+  ├─── JOIN #general ─────►│                         │
+  │                        ├─ get_or_create()        │
+  │                        │◄────────────────────────┤
+  │                        ├─ add_member(A) ────────►│
+  │                        │                         │
+  │◄── :A JOIN #general ───┤                         │
+  │◄── TOPIC ──────────────┤                         │
+  │◄── NAMES ──────────────┤                         │
+  │                        │                         │
+
+  [Client B joins]
+
+Client B                 Server                   Channel
+  │                        │                         │
+  ├─── JOIN #general ─────►│                         │
+  │                        ├─ add_member(B) ────────►│
+  │◄── :B JOIN #general ───┤                         │
+  │                        ├─ broadcast() ──────────►│
+Client A                   │                         │
+  │◄── :B JOIN #general ───┤◄────────────────────────┤
+```
+
+### 4. Message Broadcasting
+
+```
+Client A               Server              Channel            Client B
+  │                      │                    │                  │
+  ├─ PRIVMSG #test :Hi ─►│                    │                  │
+  │                      ├─ parse_message()   │                  │
+  │                      ├─ handle_PRIVMSG()  │                  │
+  │                      │                    │                  │
+  │                      ├─ broadcast() ──────►│                  │
+  │                      │                    ├─ for each member ┤
+  │                      │                    ├─ (except sender) ┤
+  │                      │                    │                  │
+  │                      │                    ├──────────────────►│
+  │                      │                    │  :A PRIVMSG :Hi  │
+```
+
+## Event Loop
+
+```
+┌────────────────────────────────────────────┐
+│           Main Event Loop                  │
+└────────────────────────────────────────────┘
+            │
+            ▼
+┌────────────────────────────────────────────┐
+│  poll(poll_fds, size, -1)                  │
+│  Wait for events on any FD                 │
+└────────┬───────────────────────────────────┘
+         │
+         ▼
+    ┌─────────────┐
+    │ Event Ready?│
+    └──┬──────┬───┘
+       │      │
+     YES     NO (continue)
+       │
+       ▼
+┌──────────────────┐
+│ Listening Socket?│
+└──┬───────────┬───┘
+   │          │
+  YES        NO
+   │          │
+   ▼          ▼
+┌─────────┐  ┌────────────────┐
+│ Accept  │  │ Client Message │
+│ New     │  └────────────────┘
+│ Client  │          │
+└─────────┘          ▼
+                ┌────────────────┐
+                │ recv() data    │
+                └────────┬───────┘
+                         │
+                         ▼
+                ┌─────────────────────┐
+                │ Parse IRC message   │
+                │ IRCMessage::parse() │
+                └────────┬────────────┘
+                         │
+                         ▼
+                ┌─────────────────────────┐
+                │ Dispatch to handler     │
+                │ handle_PASS/NICK/JOIN..│
+                └─────────────────────────┘
+```
+
+## Data Flow - User Sends Message
+
+```
+                 ┌──────────────────────┐
+                 │ User types in client │
+                 └───────────┬──────────┘
+                             │
+                             ▼
+    ┌────────────────────────────────────────────┐
+    │ IRC Client converts to IRC format          │
+    │ "PRIVMSG #general :Hello everyone!"        │
+    └───────────────────┬────────────────────────┘
+                        │ TCP Socket
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ Server recv() ← socket buffer              │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ Add to client->buffer (partial msg handling)│
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ Find \r\n → complete message               │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ IRCMessage::parse()                        │
+    │ → command: "PRIVMSG"                       │
+    │ → params: ["#general"]                     │
+    │ → trailing: "Hello everyone!"              │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ handle_PRIVMSG()                           │
+    │ - Validate registered                      │
+    │ - Check channel exists                     │
+    │ - Check user is member                     │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ Channel::broadcast()                       │
+    │ - For each member (except sender)          │
+    │   - Format: ":alice PRIVMSG #general :Hi"  │
+    │   - send() to member's socket              │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼ TCP Socket
+    ┌────────────────────────────────────────────┐
+    │ Other clients recv() ← socket buffer       │
+    └───────────────────┬────────────────────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────────┐
+    │ IRC Client displays message to user        │
+    │ "alice: Hello everyone!"                   │
+    └────────────────────────────────────────────┘
+```
+
+## Memory Management
+
+```
+Server (owns)
+  │
+  ├─► map<int, Client*>
+  │   └─► new Client() on accept
+  │       └─► delete client on disconnect
+  │
+  └─► map<string, Channel*>
+      └─► new Channel() when first user joins
+          └─► delete channel when last user leaves
+```
+
+## Thread Model
+
+```
+Single-threaded event-driven:
+
+┌──────────────────────────┐
+│    Main Thread           │
+│                          │
+│  ┌────────────────────┐  │
+│  │  Event Loop        │  │
+│  │  (poll)            │  │
+│  │                    │  │
+│  │  → Accept          │  │
+│  │  → Read messages   │  │
+│  │  → Parse & dispatch│  │
+│  │  → Send responses  │  │
+│  └────────────────────┘  │
+│                          │
+│  Non-blocking I/O        │
+│  No mutexes needed       │
+└──────────────────────────┘
+```
+
+## File Descriptor Management
+
+```
+poll_fds[0]  → listening socket (fd 3)
+poll_fds[1]  → client 1 socket (fd 4)
+poll_fds[2]  → client 2 socket (fd 5)
+poll_fds[3]  → client 3 socket (fd 6)
+...
+poll_fds[N]  → client N socket (fd N+3)
+
+When client disconnects:
+- Close FD
+- Delete Client object
+- Remove from poll_fds
+- Remove from clients map
+- Remove from clients_by_nick
+- Remove from all channels
+```
+
+## Command Dispatch
+
+```
+handle_command(client, message)
+    │
+    ├─ PASS → handle_PASS()
+    ├─ NICK → handle_NICK()
+    ├─ USER → handle_USER()
+    ├─ JOIN → handle_JOIN()
+    ├─ PART → handle_PART()
+    ├─ PRIVMSG → handle_PRIVMSG()
+    ├─ KICK → handle_KICK()
+    ├─ INVITE → handle_INVITE()
+    ├─ TOPIC → handle_TOPIC()
+    ├─ MODE → handle_MODE()
+    ├─ QUIT → handle_QUIT()
+    ├─ PING → handle_PING()
+    └─ ??? → 421 Unknown command
+```
+
+## Security Layers
+
+```
+┌────────────────────────────────────┐
+│   Connection Attempt               │
+└────────────┬───────────────────────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ Accept Limit │ ← MAX_CLIENTS check
+      └──────┬───────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ PASS command │ ← Password check
+      └──────┬───────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ NICK command │ ← Nickname validation
+      └──────┬───────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ USER command │ ← Registration complete
+      └──────┬───────┘
+             │
+             ▼
+      ┌──────────────┐
+      │ IRC Commands │ ← Full access
+      └──────────────┘
+```
+
+## Performance Characteristics
+
+```
+Operation          | Time Complexity | Space
+──────────────────|─────────────────|──────
+Find user by nick | O(1)            | O(n)
+Find channel      | O(1)            | O(m)
+Send to channel   | O(members)      | O(1)
+Join channel      | O(1)            | O(1)
+Parse message     | O(length)       | O(1)
+Poll events       | O(connections)  | O(n)
+
+Where:
+n = number of users
+m = number of channels
+```
+
+This architecture provides a solid foundation for a high-performance IRC server that can handle 100+ concurrent users efficiently!

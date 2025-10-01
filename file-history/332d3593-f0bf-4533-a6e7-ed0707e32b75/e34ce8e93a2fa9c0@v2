@@ -1,0 +1,17 @@
+#!/bin/bash
+# Download Eva - Female German Voice for Sofia
+
+echo "🎤 Downloading Eva (Female German Voice)..."
+
+mkdir -p ~/.local/share/piper-voices
+cd ~/.local/share/piper-voices
+
+# Download Eva voice model
+curl -L "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx" -o de_DE-eva_k-x_low.onnx
+
+# Download Eva voice config
+curl -L "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx.json" -o de_DE-eva_k-x_low.onnx.json
+
+echo ""
+echo "✅ Downloaded Eva female voice!"
+ls -lh ~/.local/share/piper-voices/de_DE-eva*

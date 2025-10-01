@@ -1,0 +1,33 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   IRCMessage.hpp                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/10/01 20:00:00 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#pragma once
+
+#include <string>
+#include <vector>
+
+struct IRCMessage
+{
+    std::string prefix;
+    std::string command;
+    std::vector<std::string> params;
+    std::string trailing;
+
+    // Parse IRC message format: [:prefix] COMMAND [params] [:trailing]
+    static IRCMessage parse(const std::string& line);
+
+    // Validate message format
+    bool validate() const;
+
+    // Check if message has minimum required params
+    bool has_params(size_t count) const;
+};

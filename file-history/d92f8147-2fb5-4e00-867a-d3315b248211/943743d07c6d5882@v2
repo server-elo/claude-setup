@@ -1,0 +1,449 @@
+# Advanced Red Team Framework - Architecture
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    RedTeamOrchestrator                          │
+│                    (Main Coordinator)                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        ▼                                           ▼
+┌─────────────────┐                       ┌─────────────────┐
+│  Strategy       │                       │  Red Team       │
+│  Proposer Agent │◄─────────────────────►│  Agent          │
+│  (AutoRedTeamer)│                       │  (RedAgent)     │
+└─────────────────┘                       └─────────────────┘
+        │                                           │
+        │                                           │
+        ▼                                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Attack Memory System                         │
+│              (Memory-Guided Attack Selection)                   │
+└─────────────────────────────────────────────────────────────────┘
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌─────────────┐    ┌─────────────────┐    ┌──────────────┐
+│  Persona    │    │  MITRE ATT&CK   │    │  Prompt      │
+│  Generator  │    │  Attack Tree    │    │  Mutator     │
+│(PersonaTeam)│    │(Guided Reason.) │    │(PersonaTeam) │
+└─────────────┘    └─────────────────┘    └──────────────┘
+```
+
+## Component Details
+
+### 1. RedTeamOrchestrator
+
+**Location**: `src/orchestrator.py`
+
+**Responsibilities**:
+- Coordinate all framework components
+- Execute 6-phase attack workflow
+- Implement SEAS iterative improvement
+- Aggregate and report results
+
+**Key Methods**:
+```python
+execute_full_attack(target, objectives, context)
+  └─> Phase 1: Strategy Discovery
+  └─> Phase 2: Persona Generation
+  └─> Phase 3: Prompt Mutation
+  └─> Phase 4: MITRE ATT&CK Execution
+  └─> Phase 5: RedAgent Attacks
+  └─> Phase 6: Memory Analysis
+
+iterative_improvement(target, objectives, num_iterations)
+  └─> Execute attack
+  └─> Analyze failures
+  └─> Adapt strategies
+  └─> Repeat
+```
+
+### 2. Strategy Proposer Agent
+
+**Location**: `src/agents/strategy_proposer.py`
+
+**Based on**: AutoRedTeamer (arXiv:2503.15754)
+
+**Responsibilities**:
+- Discover new attack strategies from research
+- Analyze attack failures
+- Propose adaptations
+- Synthesize hybrid strategies
+
+**Key Algorithms**:
+```python
+discover_new_strategies()
+  ├─> Fetch recent research papers
+  ├─> Extract techniques
+  ├─> Create AttackStrategy objects
+  └─> Add to memory
+
+propose_attack_adaptations(failed_attacks)
+  ├─> Analyze failure patterns
+  ├─> Generate novel variations
+  └─> Return adapted strategies
+
+synthesize_hybrid_strategy(successful_strategies)
+  ├─> Combine top tactics
+  ├─> Identify synergies
+  └─> Create hybrid strategy
+```
+
+### 3. Red Team Agent (RedAgent)
+
+**Location**: `src/agents/red_agent.py`
+
+**Based on**: RedAgent (arXiv:2407.16667)
+
+**Responsibilities**:
+- Execute context-aware jailbreak attempts
+- Self-reflect on responses
+- Adapt strategies mid-attack
+- Achieve 90% success in ≤5 queries
+
+**Architecture**:
+```python
+ContextAwareAgent
+  ├─> jailbreak_strategies [8 strategies]
+  ├─> conversation_buffer [context memory]
+  └─> reflection_buffer [self-reflection]
+
+execute_jailbreak(objective, context)
+  ├─> select_strategy() [context-based]
+  ├─> For i in range(max_queries):
+  │     ├─> generate_contextual_prompt()
+  │     ├─> Execute query
+  │     ├─> self_reflect() [analyze response]
+  │     └─> adapt_strategy() [if needed]
+  └─> Record results
+```
+
+**8 Jailbreak Strategies**:
+1. Gradual Escalation
+2. Role-Play Injection
+3. Authority Exploitation
+4. Confusion and Complexity
+5. Assumption Violation
+6. Emotional Manipulation
+7. Technical Obfuscation
+8. Multi-Modal Confusion
+
+### 4. Persona System
+
+**Location**: `src/persona/generator.py`, `src/persona/mutator.py`
+
+**Based on**: PersonaTeaming (arXiv:2509.03728)
+
+**Responsibilities**:
+- Generate diverse attack personas
+- Mutate prompts based on persona characteristics
+- Achieve 144% improvement in attack success
+
+**Persona Types**:
+
+**Expert Personas**:
+- Security Researcher
+- AI Safety Researcher
+- Red Team Operator
+- Ethical Hacker
+- Adversarial ML Specialist
+
+**Regular User Personas**:
+- Curious Student
+- Frustrated User
+- Developer
+- Content Creator
+- Malicious Actor
+
+**Mutation Strategies**:
+```python
+PromptMutator.mutate_with_persona(seed, persona)
+  ├─> Select mutation strategy
+  │     ├─> Expert: technical_escalation, cognitive_bias, multi_step
+  │     ├─> Intermediate: api_boundary, error_exploitation
+  │     └─> Novice: simple_rephrase, emotional_framing
+  ├─> Apply mutation
+  ├─> Calculate mutation_distance
+  └─> Return MutatedPrompt
+```
+
+### 5. MITRE ATT&CK System
+
+**Location**: `src/mitre/attack_tree.py`, `src/mitre/guided_reasoning.py`
+
+**Based on**: Guided Reasoning (arXiv:2509.07939)
+
+**Responsibilities**:
+- Build deterministic attack trees
+- Guide LLM reasoning with proven TTPs
+- Prevent hallucinated steps
+- Achieve 71.8%-78.6% completion
+
+**MITRE Tactics Implemented**:
+- Reconnaissance (T1595, T1592)
+- Initial Access (T1566, T1190)
+- Execution (T1059)
+- Persistence (T1053, T1547)
+- Privilege Escalation (T1068)
+- Defense Evasion (T1070, T1027)
+- Credential Access (T1110, T1555)
+- Discovery (T1082, T1087)
+- Collection (T1005)
+- Exfiltration (T1041)
+
+**Guided Reasoning Pipeline**:
+```python
+GuidedReasoningPipeline.execute_attack_path()
+  ├─> Build attack tree
+  ├─> For each TTP in tree:
+  │     ├─> Generate reasoning constrained by TTP
+  │     ├─> Generate action aligned with TTP
+  │     ├─> Validate action against TTP
+  │     ├─> Execute action
+  │     └─> Move to next TTP
+  └─> Return execution results
+```
+
+### 6. Attack Memory System
+
+**Location**: `src/agents/memory.py`
+
+**Based on**: AutoRedTeamer (arXiv:2503.15754)
+
+**Responsibilities**:
+- Store attack history (successes and failures)
+- Learn from past attacks
+- Guide future attack selection
+- Enable lifelong learning
+
+**Data Structures**:
+```python
+AttackRecord
+  ├─> attack_id
+  ├─> timestamp
+  ├─> target_model
+  ├─> attack_type
+  ├─> prompt
+  ├─> response
+  ├─> success
+  ├─> success_score
+  └─> context
+
+AttackStrategy
+  ├─> strategy_id
+  ├─> name
+  ├─> description
+  ├─> tactics
+  ├─> success_rate (updated via EMA)
+  ├─> usage_count
+  └─> applicable_contexts
+```
+
+**Memory-Guided Selection**:
+```python
+MemoryGuidedSelector.select_next_attack()
+  ├─> If random() < exploration_rate:
+  │     └─> Explore: random selection
+  └─> Else:
+        └─> Exploit: select highest success rate
+              ├─> Find similar past attacks
+              ├─> Calculate expected success
+              └─> Return best attack
+```
+
+### 7. LLM Abstraction Layer
+
+**Location**: `src/llm/base.py`
+
+**Supported Providers**:
+- **OllamaLLM**: Local inference with Ollama
+- **HuggingFaceLLM**: Local inference with Transformers
+- **BaseLLM**: Abstract interface for custom providers
+
+**Interface**:
+```python
+class BaseLLM:
+    async def generate(prompt, **kwargs) -> str
+    async def chat(messages, **kwargs) -> str
+```
+
+## Data Flow
+
+### Full Attack Execution Flow
+
+```
+1. User initiates attack
+   └─> RedTeamOrchestrator.execute_full_attack()
+
+2. PHASE 1: Strategy Discovery
+   └─> StrategyProposer.discover_new_strategies()
+       └─> Returns new attack strategies
+
+3. PHASE 2: Persona Generation
+   └─> PersonaGenerator.generate_persona_set()
+       └─> Returns diverse personas
+
+4. PHASE 3: Prompt Mutation
+   └─> For each (objective, persona):
+       └─> PromptMutator.mutate_with_persona()
+           └─> Returns mutated prompts
+
+5. PHASE 4: MITRE ATT&CK Execution
+   └─> GuidedReasoningPipeline.execute_attack_path()
+       └─> Executes TTPs sequentially
+           └─> Returns execution results
+
+6. PHASE 5: RedAgent Execution
+   └─> RedAgent.test_target()
+       └─> For each objective:
+           └─> ContextAwareAgent.execute_jailbreak()
+               └─> Returns success/failure
+
+7. PHASE 6: Memory Analysis
+   └─> AttackMemory.get_statistics()
+       └─> Returns aggregate metrics
+
+8. Results aggregation and reporting
+   └─> Save to JSON
+   └─> Export MITRE Navigator layer
+   └─> Generate comprehensive report
+```
+
+### SEAS Iteration Flow
+
+```
+For iteration in range(num_iterations):
+  1. Execute full attack
+  2. Collect results
+  3. Identify failures
+  4. StrategyProposer.propose_attack_adaptations(failures)
+  5. StrategyProposer.synthesize_hybrid_strategy(successes)
+  6. Update memory with new strategies
+  7. Next iteration uses improved strategies
+```
+
+## Performance Characteristics
+
+### Time Complexity
+
+- **PersonaGeneration**: O(n) where n = num_personas
+- **PromptMutation**: O(p × m) where p = personas, m = mutations
+- **MITREExecution**: O(t) where t = TTPs in attack tree
+- **RedAgentAttack**: O(o × q) where o = objectives, q = queries (max 5)
+- **FullAttack**: O(n + p×m + t + o×q)
+
+### Space Complexity
+
+- **AttackMemory**: O(a) where a = total attacks stored
+- **Personas**: O(p) in memory during execution
+- **AttackTree**: O(t) for TTP nodes
+
+### Scalability
+
+**Horizontal**:
+- Multiple agents can run in parallel
+- Async/await throughout for concurrency
+- Independent attack streams
+
+**Vertical**:
+- Memory system grows with attacks
+- Strategies accumulate over time
+- Performance improves via learning
+
+## Extension Points
+
+### 1. Custom LLM Provider
+
+```python
+class MyLLM(BaseLLM):
+    async def generate(self, prompt, **kwargs):
+        # Your implementation
+        pass
+```
+
+### 2. Custom Jailbreak Strategy
+
+```python
+# In red_agent.py
+new_strategy = JailbreakStrategy(
+    name="My Custom Strategy",
+    description="...",
+    tactics=["tactic1", "tactic2"],
+    example_prompts=[...]
+)
+
+agent.jailbreak_strategies.append(new_strategy)
+```
+
+### 3. Custom MITRE TTP
+
+```python
+# In attack_tree.py
+self.ttp_library["T9999"] = TTP(
+    id="T9999",
+    name="Custom Technique",
+    tactic=TacticType.EXECUTION,
+    description="...",
+    platforms=["Linux"],
+    ...
+)
+```
+
+### 4. Custom Persona Template
+
+```python
+# In generator.py
+PersonaGenerator.EXPERT_TEMPLATES.append({
+    "name": "My Expert",
+    "role": "custom_role",
+    "background": "...",
+    ...
+})
+```
+
+## Security Considerations
+
+### Defensive Use Only
+
+This framework is designed for **defensive security research**:
+- ✅ Authorized penetration testing
+- ✅ AI safety evaluation
+- ✅ Vulnerability discovery (responsible disclosure)
+- ❌ Unauthorized attacks
+- ❌ Malicious use
+
+### Data Privacy
+
+- Attack memory stored locally
+- No telemetry or data collection
+- User controls all data
+
+### Model Safety
+
+- All LLM calls are logged
+- Results saved for audit
+- Memory system tracks all attacks
+
+## Future Enhancements
+
+### Planned Features
+
+1. **Distributed Execution**: Multi-machine parallel attacks
+2. **Advanced Embeddings**: Semantic similarity for memory selection
+3. **Real-time Learning**: Online strategy updates
+4. **Visualization Dashboard**: Web UI for results analysis
+5. **Integration APIs**: RESTful API for CI/CD integration
+
+### Research Integration
+
+Future papers to integrate:
+- Multi-modal attacks (vision + language)
+- Reinforcement learning for strategy optimization
+- Federated red teaming
+- Zero-shot attack generation
+
+---
+
+For implementation details, see source code comments and docstrings.

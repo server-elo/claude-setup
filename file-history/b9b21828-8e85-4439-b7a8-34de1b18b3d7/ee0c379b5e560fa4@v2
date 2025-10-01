@@ -1,0 +1,314 @@
+# 🚀 Quick Start Guide for ft_irc
+
+## Build & Run
+
+```bash
+# 1. Compile
+make
+
+# 2. Start server
+./ircserv 6667 mypassword
+
+# Server will show:
+# ===================================
+#        ft_irc Server v1.0
+# ===================================
+# Port: 6667
+# Password: ***
+# Max clients: 100
+# ===================================
+#
+# IRC Server listening on port 6667
+# Server ready to accept connections
+```
+
+## Test with netcat (simplest method)
+
+Open another terminal:
+
+```bash
+nc localhost 6667
+```
+
+Then type these commands (press Enter after each):
+
+```
+PASS mypassword
+NICK bob
+USER bob 0 * :Bob Smith
+JOIN #general
+PRIVMSG #general :Hello everyone!
+TOPIC #general :Welcome to our channel
+QUIT :Goodbye
+```
+
+## Test with Real IRC Client
+
+### Option 1: irssi (recommended)
+
+```bash
+# Install if needed
+brew install irssi     # macOS
+# or
+sudo apt install irssi # Linux
+
+# Connect
+irssi -c localhost -p 6667
+```
+
+In irssi, type:
+```
+/PASS mypassword
+/NICK yourname
+/JOIN #general
+/MSG #general Hello!
+/TOPIC #general Welcome!
+/PART #general Leaving
+/QUIT
+```
+
+### Option 2: WeeChat
+
+```bash
+brew install weechat   # macOS
+# or
+sudo apt install weechat  # Linux
+
+# Run
+weechat
+```
+
+In WeeChat:
+```
+/server add myserver localhost/6667
+/set irc.server.myserver.password mypassword
+/connect myserver
+/join #general
+/msg #general Hello!
+```
+
+## Multi-Client Testing
+
+### Terminal 1 - Start Server:
+```bash
+./ircserv 6667 test123
+```
+
+### Terminal 2 - Alice:
+```bash
+nc localhost 6667
+PASS test123
+NICK alice
+USER alice 0 * :Alice
+JOIN #chat
+PRIVMSG #chat :Hi, I'm Alice!
+```
+
+### Terminal 3 - Bob:
+```bash
+nc localhost 6667
+PASS test123
+NICK bob
+USER bob 0 * :Bob
+JOIN #chat
+PRIVMSG #chat :Hi Alice, I'm Bob!
+```
+
+### Terminal 4 - Charlie (observer):
+```bash
+nc localhost 6667
+PASS test123
+NICK charlie
+USER charlie 0 * :Charlie
+JOIN #chat
+```
+
+Now Charlie sees both Alice and Bob's messages!
+
+## Command Reference
+
+### Essential Commands
+
+```
+PASS <password>              Authenticate (MUST be first)
+NICK <nickname>              Set your nickname
+USER <user> 0 * :<realname>  Register (required after NICK)
+JOIN <channel>               Join a channel (#general, #random, etc)
+PRIVMSG <target> :<msg>      Send message to channel or user
+PART <channel> :<reason>     Leave a channel
+QUIT :<reason>               Disconnect from server
+```
+
+### Channel Operations
+
+```
+TOPIC <channel> :<topic>     Set/view channel topic
+KICK <channel> <nick> :<reason>   Kick user (operators only)
+INVITE <nick> <channel>      Invite user to channel
+MODE <channel> <modes>       Change channel modes
+```
+
+### Channel Modes
+
+```
+MODE #general +i             Make invite-only
+MODE #general -i             Remove invite-only
+MODE #general +t             Protect topic (ops only can change)
+MODE #general +k password    Set channel password
+MODE #general +l 50          Limit to 50 users
+MODE #general +o alice       Give operator status to alice
+MODE #general -o alice       Remove operator status from alice
+```
+
+### Private Messages
+
+```
+PRIVMSG bob :Hey Bob!        Send private message to bob
+PRIVMSG #general :Hello all! Send to channel
+```
+
+## Testing Features
+
+### Test 1: Basic Connection
+```bash
+echo -e "PASS test123\r\nNICK test\r\nUSER test 0 * :Test\r\n" | nc localhost 6667
+```
+
+### Test 2: Multiple Channels
+```bash
+nc localhost 6667
+PASS test123
+NICK user1
+USER user1 0 * :User One
+JOIN #chan1,#chan2,#chan3
+PRIVMSG #chan1 :Hello chan1
+PRIVMSG #chan2 :Hello chan2
+PART #chan1,#chan2
+QUIT
+```
+
+### Test 3: Operator Commands
+```bash
+# Terminal 1 (operator - first user)
+nc localhost 6667
+PASS test123
+NICK admin
+USER admin 0 * :Admin
+JOIN #test
+TOPIC #test :Admin's channel
+MODE #test +i
+INVITE newuser #test
+
+# Terminal 2 (regular user)
+nc localhost 6667
+PASS test123
+NICK newuser
+USER newuser 0 * :New User
+JOIN #test  # Should work because invited
+```
+
+### Test 4: Kick User
+```bash
+# As operator
+KICK #test spammer :No spamming!
+```
+
+## Troubleshooting
+
+### Server won't start:
+```bash
+# Check if port is in use
+lsof -i :6667
+
+# Try different port
+./ircserv 6668 mypassword
+```
+
+### Connection closes immediately:
+- Did you send PASS first?
+- Is the password correct?
+- Check server logs
+
+### Can't send to channel:
+- Did you JOIN the channel first?
+- Is the channel name valid? (must start with #)
+
+### Commands not working:
+- IRC commands are case-insensitive (NICK = nick = NiCk)
+- Commands must end with \r\n (netcat does this automatically)
+- Check you completed registration (PASS, NICK, USER)
+
+## Expected Server Output
+
+When clients connect and chat, you'll see:
+```
+New connection from 127.0.0.1 (fd: 4)
+Received from 4: PASS test123
+Received from 4: NICK alice
+Received from 4: USER alice 0 * :Alice
+Received from 4: JOIN #general
+New connection from 127.0.0.1 (fd: 5)
+Received from 5: PASS test123
+Received from 5: NICK bob
+Received from 5: USER bob 0 * :Bob
+Received from 5: JOIN #general
+Received from 4: PRIVMSG #general :Hi Bob!
+Received from 5: PRIVMSG #general :Hi Alice!
+```
+
+## Load Testing
+
+Test 50 concurrent connections:
+```bash
+for i in {1..50}; do
+    (echo -e "PASS test123\r\nNICK user$i\r\nUSER user$i 0 * :User $i\r\nJOIN #load\r\nPRIVMSG #load :Message from user$i\r\n" | nc localhost 6667) &
+done
+```
+
+## Stop Server
+
+```bash
+# Graceful shutdown (Ctrl+C)
+^C
+
+# Output:
+# ^C
+# Server shutting down...
+# Server stopped.
+```
+
+## Quick Test Script
+
+Use the included test script:
+```bash
+./test_client.sh 6667 mypassword
+```
+
+This will automatically:
+1. Connect
+2. Authenticate
+3. Register
+4. Join channel
+5. Send message
+6. Set topic
+7. Leave
+8. Quit
+
+## Summary of Flow
+
+**Correct connection order:**
+1. Connect with `nc localhost 6667`
+2. Send `PASS mypassword`
+3. Send `NICK yournick`
+4. Send `USER yournick 0 * :Your Name`
+5. Server sends welcome (001-004)
+6. Now you can `JOIN #channel` and chat!
+
+**Remember:**
+- ✅ PASS must be first
+- ✅ NICK before USER
+- ✅ JOIN after registration
+- ✅ Channel names start with #
+- ✅ Messages need : before text
+
+Enjoy your IRC server! 🎉

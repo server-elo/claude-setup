@@ -1,0 +1,5 @@
+#!/bin/bash
+# Sofia MAXPOWER Launcher - Double click to run!
+
+cd "/Users/tolga/Desktop/📁 Projects/elvi/sofia-pers/sofia-local"
+.venv/bin/python agent.py console

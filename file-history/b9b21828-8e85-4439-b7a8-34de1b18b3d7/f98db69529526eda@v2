@@ -1,0 +1,240 @@
+# ft_irc - Internet Relay Chat Server
+
+A fully functional IRC server implementation in C++98, built from scratch with proper IRC protocol support.
+
+## Features
+
+✅ **Complete IRC Protocol Implementation**
+- User authentication (PASS command)
+- User registration (NICK, USER commands)
+- Channel operations (JOIN, PART, KICK, INVITE)
+- Private messaging (PRIVMSG to users and channels)
+- Channel modes (+i, +t, +k, +o, +l)
+- Topic management
+- Operator privileges
+
+✅ **Security & Stability**
+- Server password protection
+- Connection limits (max 100 clients)
+- Input validation and sanitization
+- Non-blocking I/O
+- Graceful shutdown (SIGINT/SIGTERM handling)
+- Socket hardening (SO_REUSEADDR, SO_KEEPALIVE, TCP_NODELAY)
+
+✅ **Performance**
+- Poll-based I/O multiplexing
+- Efficient channel broadcasting
+- Memory pooling for clients
+- Fast nickname/channel lookups
+
+## Building
+
+```bash
+make
+```
+
+## Usage
+
+```bash
+./ircserv <port> <password>
+```
+
+**Example:**
+```bash
+./ircserv 6667 mypassword123
+```
+
+## Connecting with IRC Client
+
+### Using irssi:
+```bash
+irssi -c localhost -p 6667
+```
+
+Then in irssi:
+```
+/PASS mypassword123
+/NICK yournick
+/JOIN #general
+/MSG #general Hello everyone!
+```
+
+### Using WeeChat:
+```bash
+weechat
+```
+
+Then:
+```
+/server add local localhost/6667
+/set irc.server.local.password mypassword123
+/connect local
+/join #general
+```
+
+### Using netcat (for testing):
+```bash
+nc localhost 6667
+```
+
+Then type:
+```
+PASS mypassword123
+NICK bob
+USER bob 0 * :Bob Smith
+JOIN #test
+PRIVMSG #test :Hello world!
+```
+
+## Supported IRC Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `PASS` | Authenticate with server | `PASS mypassword` |
+| `NICK` | Set your nickname | `NICK john` |
+| `USER` | Set user info | `USER john 0 * :John Doe` |
+| `JOIN` | Join channel(s) | `JOIN #general,#random` |
+| `PART` | Leave channel(s) | `PART #general :Going away` |
+| `PRIVMSG` | Send message | `PRIVMSG #general :Hello!` |
+| `QUIT` | Disconnect | `QUIT :Goodbye` |
+| `KICK` | Kick user from channel | `KICK #general bob :Spam` |
+| `INVITE` | Invite user to channel | `INVITE alice #private` |
+| `TOPIC` | Get/set channel topic | `TOPIC #general :Welcome!` |
+| `MODE` | Get/set channel modes | `MODE #general +i` |
+| `PING` | Keepalive | `PING :token` |
+
+## Channel Modes
+
+| Mode | Description |
+|------|-------------|
+| `+i` | Invite-only channel |
+| `+t` | Protected topic (only ops can change) |
+| `+k <key>` | Channel password |
+| `+o <nick>` | Grant operator status |
+| `+l <limit>` | User limit |
+
+**Examples:**
+```
+MODE #general +i          # Make channel invite-only
+MODE #general +k pass123  # Set channel password
+MODE #general +o alice    # Make alice an operator
+MODE #general +l 50       # Limit to 50 users
+```
+
+## Testing
+
+### Manual Testing:
+
+Start server:
+```bash
+./ircserv 6667 test123
+```
+
+In another terminal:
+```bash
+# Test with netcat
+nc localhost 6667
+PASS test123
+NICK testuser
+USER testuser 0 * :Test User
+JOIN #test
+PRIVMSG #test :Hello!
+```
+
+### Load Testing:
+
+```bash
+# Connect 50 clients simultaneously
+for i in {1..50}; do
+    (echo -e "PASS test123\r\nNICK user$i\r\nUSER user$i 0 * :User $i\r\n" | nc localhost 6667) &
+done
+```
+
+## File Structure
+
+```
+ft_irc/
+├── include/
+│   ├── Client.hpp       # Client class
+│   ├── Channel.hpp      # Channel class
+│   ├── Server.hpp       # Server class
+│   └── IRCMessage.hpp   # Message parser
+├── src/
+│   ├── main.cpp         # Entry point
+│   ├── Server.cpp       # Server implementation
+│   ├── Client.cpp       # Client implementation
+│   ├── Channel.cpp      # Channel implementation
+│   └── IRCMessage.cpp   # Message parsing
+├── Makefile
+└── README.md
+```
+
+## Configuration
+
+Edit `include/Server.hpp` to change:
+```cpp
+#define MAX_CLIENTS 100   // Maximum concurrent connections
+#define MAX_BUFF 512      // IRC message max length
+```
+
+## Troubleshooting
+
+### Port already in use:
+```bash
+# Check what's using the port
+lsof -i :6667
+
+# Kill the process
+kill -9 <PID>
+```
+
+### Connection refused:
+- Make sure the server is running
+- Check firewall settings
+- Try using 127.0.0.1 instead of localhost
+
+### Can't connect with IRC client:
+- Make sure you're sending the PASS command first
+- Check the password is correct
+- Try with netcat first to verify server works
+
+## Development
+
+### Adding New Commands:
+
+1. Add handler declaration in `include/Server.hpp`:
+```cpp
+void handle_MYCOMMAND(Client* client, const IRCMessage& msg);
+```
+
+2. Implement in `src/Server.cpp`:
+```cpp
+void Server::handle_MYCOMMAND(Client* client, const IRCMessage& msg)
+{
+    // Your implementation
+}
+```
+
+3. Register in `handle_command()`:
+```cpp
+else if (cmd == "MYCOMMAND")
+    handle_MYCOMMAND(client, msg);
+```
+
+### Code Style:
+- C++98 compliant
+- Orthodox Canonical Form for classes
+- Clear comments for complex logic
+- Error handling for all syscalls
+
+## Credits
+
+Built by tndreka for 42 School's ft_irc project.
+
+Based on:
+- RFC 1459 (Original IRC Protocol)
+- RFC 2812 (Updated IRC Protocol)
+
+## License
+
+This is a 42 School project. Feel free to learn from it but don't copy for your own 42 projects!

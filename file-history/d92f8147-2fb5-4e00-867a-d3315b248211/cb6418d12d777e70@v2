@@ -1,0 +1,407 @@
+"""
+Advanced Red Team Framework Orchestrator
+Integrates all 5 research-backed components:
+1. AutoRedTeamer - Multi-agent with lifelong learning
+2. PersonaTeaming - 144% improvement via personas
+3. MITRE ATT&CK - 71.8%-78.6% task completion
+4. RedAgent - 90% success with 5 queries
+5. SEAS - Self-evolving adversarial optimization
+"""
+
+from typing import List, Dict, Optional, Any
+import asyncio
+from pathlib import Path
+import json
+from datetime import datetime
+
+from .llm.base import BaseLLM, OllamaLLM, HuggingFaceLLM
+from .config import RedTeamConfig
+from .agents.red_agent import RedAgent, ContextAwareAgent
+from .agents.strategy_proposer import StrategyProposer
+from .agents.memory import AttackMemory, MemoryGuidedSelector
+from .persona.generator import PersonaGenerator, Persona
+from .persona.mutator import PromptMutator
+from .mitre.attack_tree import AttackTree
+from .mitre.guided_reasoning import GuidedReasoningPipeline
+
+
+class RedTeamOrchestrator:
+    """
+    Main orchestrator that coordinates all red team components.
+    Implements the complete AutoRedTeamer architecture.
+    """
+
+    def __init__(self, config: Optional[RedTeamConfig] = None):
+        self.config = config or RedTeamConfig()
+
+        # Initialize LLM providers
+        self.target_llm = self._create_llm(self.config.target_model)
+        self.red_team_llm = self._create_llm(self.config.red_team_model)
+        self.strategy_llm = self._create_llm(self.config.strategy_model)
+
+        # Initialize memory system
+        self.attack_memory = AttackMemory(self.config.attack_memory_path)
+        self.memory_selector = MemoryGuidedSelector(self.attack_memory)
+
+        # Initialize agents
+        self.red_agent = RedAgent(
+            self.red_team_llm,
+            self.attack_memory,
+            self.config.max_queries_per_attack
+        )
+
+        self.strategy_proposer = StrategyProposer(
+            self.strategy_llm,
+            self.attack_memory
+        )
+
+        # Initialize persona system
+        self.persona_generator = PersonaGenerator()
+        self.prompt_mutator = PromptMutator(self.red_team_llm)
+
+        # Initialize MITRE ATT&CK system
+        self.attack_tree = AttackTree()
+        self.guided_reasoning = GuidedReasoningPipeline(
+            self.red_team_llm,
+            self.attack_tree
+        )
+
+        # Results storage
+        self.results: List[Dict[str, Any]] = []
+
+    def _create_llm(self, model_name: str) -> BaseLLM:
+        """Create LLM instance based on configuration."""
+        if ":" in model_name:  # Ollama format (e.g., llama3:8b)
+            return OllamaLLM(
+                model=model_name,
+                base_url=self.config.ollama_base_url,
+                timeout=self.config.ollama_timeout
+            )
+        else:  # HuggingFace format
+            return HuggingFaceLLM(
+                model_name=model_name,
+                cache_dir=self.config.hf_cache_dir
+            )
+
+    async def execute_full_attack(
+        self,
+        target: str,
+        objectives: List[str],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute complete red team attack with all 5 components.
+
+        Args:
+            target: Target system/model identifier
+            objectives: List of attack objectives
+            context: Optional context information
+
+        Returns:
+            Comprehensive results dictionary
+        """
+        context = context or {}
+        print(f"\n{'='*60}")
+        print(f"ADVANCED RED TEAM FRAMEWORK - FULL ATTACK EXECUTION")
+        print(f"{'='*60}")
+        print(f"Target: {target}")
+        print(f"Objectives: {len(objectives)}")
+        print(f"{'='*60}\n")
+
+        # Phase 1: Strategy Discovery
+        print("\n[PHASE 1] Strategy Discovery (AutoRedTeamer)")
+        print("-" * 60)
+        new_strategies = await self.strategy_proposer.discover_new_strategies()
+        print(f"✓ Discovered {len(new_strategies)} new attack strategies")
+
+        # Phase 2: Persona Generation
+        print("\n[PHASE 2] Persona Generation (PersonaTeaming)")
+        print("-" * 60)
+        personas = []
+        for objective in objectives[:3]:  # Sample of objectives
+            objective_personas = self.persona_generator.generate_persona_set(
+                objective,
+                num_personas=self.config.max_personas_per_seed,
+                mix_types=True
+            )
+            personas.extend(objective_personas)
+        print(f"✓ Generated {len(personas)} diverse attack personas")
+
+        # Phase 3: Prompt Mutation
+        print("\n[PHASE 3] Prompt Mutation")
+        print("-" * 60)
+        mutated_prompts = []
+        for i, objective in enumerate(objectives[:5]):  # Sample
+            for persona in personas[:3]:  # Top 3 personas per objective
+                mutations = await self.prompt_mutator.mutate_with_persona(
+                    objective,
+                    persona,
+                    num_mutations=2
+                )
+                mutated_prompts.extend(mutations)
+        print(f"✓ Generated {len(mutated_prompts)} mutated attack prompts")
+
+        # Phase 4: MITRE ATT&CK Guided Execution
+        print("\n[PHASE 4] MITRE ATT&CK Guided Reasoning")
+        print("-" * 60)
+        mitre_results = await self.guided_reasoning.execute_attack_path(
+            objectives[0] if objectives else "Penetration testing",
+            context
+        )
+        print(f"✓ Executed {len(mitre_results)} MITRE ATT&CK guided steps")
+        print(f"  Success rate: {sum(1 for r in mitre_results if r.success)/len(mitre_results)*100:.1f}%")
+
+        # Phase 5: RedAgent Context-Aware Attacks
+        print("\n[PHASE 5] RedAgent Execution (5-query jailbreaks)")
+        print("-" * 60)
+        red_agent_results = await self.red_agent.test_target(
+            target,
+            objectives,
+            context
+        )
+        print(f"✓ Completed {red_agent_results['total_tests']} RedAgent tests")
+        print(f"  Success rate: {red_agent_results['success_rate']*100:.1f}%")
+        print(f"  Avg queries: {red_agent_results['average_queries']:.1f}")
+
+        # Phase 6: Memory-Guided Selection Analysis
+        print("\n[PHASE 6] Memory-Guided Analysis")
+        print("-" * 60)
+        memory_stats = self.attack_memory.get_statistics()
+        print(f"✓ Total attacks in memory: {memory_stats['total_attacks']}")
+        print(f"  Overall success rate: {memory_stats['success_rate']*100:.1f}%")
+        print(f"  Strategies learned: {memory_stats['total_strategies']}")
+
+        # Compile comprehensive results
+        results = {
+            "target": target,
+            "timestamp": datetime.now().isoformat(),
+            "configuration": {
+                "max_iterations": self.config.max_iterations,
+                "max_queries": self.config.max_queries_per_attack,
+                "personas_per_seed": self.config.max_personas_per_seed
+            },
+            "phase1_strategy_discovery": {
+                "new_strategies": len(new_strategies),
+                "strategies": [s.name for s in new_strategies]
+            },
+            "phase2_persona_generation": {
+                "total_personas": len(personas),
+                "persona_types": list(set([p.expertise_level for p in personas]))
+            },
+            "phase3_prompt_mutation": {
+                "total_mutations": len(mutated_prompts),
+                "avg_mutation_distance": sum(m.mutation_distance for m in mutated_prompts) / len(mutated_prompts) if mutated_prompts else 0
+            },
+            "phase4_mitre_attack": {
+                "total_steps": len(mitre_results),
+                "successful_steps": sum(1 for r in mitre_results if r.success),
+                "success_rate": sum(1 for r in mitre_results if r.success) / len(mitre_results) if mitre_results else 0,
+                "tactics_covered": len(self.guided_reasoning.get_mitre_coverage())
+            },
+            "phase5_red_agent": red_agent_results,
+            "phase6_memory_analysis": memory_stats,
+            "overall_metrics": {
+                "total_attack_vectors": len(mutated_prompts) + len(mitre_results) + len(objectives),
+                "combined_success_rate": (
+                    red_agent_results['success_rate'] +
+                    (sum(1 for r in mitre_results if r.success) / len(mitre_results) if mitre_results else 0)
+                ) / 2
+            }
+        }
+
+        self.results.append(results)
+
+        # Save results
+        self._save_results(results)
+
+        # Save memory
+        self.attack_memory.save_memory()
+
+        print(f"\n{'='*60}")
+        print(f"EXECUTION COMPLETE")
+        print(f"{'='*60}")
+        print(f"Combined Success Rate: {results['overall_metrics']['combined_success_rate']*100:.1f}%")
+        print(f"Total Attack Vectors: {results['overall_metrics']['total_attack_vectors']}")
+        print(f"Results saved to: ./results/attack_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+        print(f"{'='*60}\n")
+
+        return results
+
+    async def iterative_improvement(
+        self,
+        target: str,
+        objectives: List[str],
+        num_iterations: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute SEAS-style iterative improvement cycles.
+
+        Args:
+            target: Target system
+            objectives: Attack objectives
+            num_iterations: Number of SEAS iterations
+
+        Returns:
+            List of results per iteration
+        """
+        print(f"\n{'='*60}")
+        print(f"SEAS: SELF-EVOLVING ADVERSARIAL SAFETY OPTIMIZATION")
+        print(f"{'='*60}")
+        print(f"Iterations: {num_iterations}")
+        print(f"{'='*60}\n")
+
+        iteration_results = []
+
+        for iteration in range(num_iterations):
+            print(f"\n[ITERATION {iteration + 1}/{num_iterations}]")
+            print("=" * 60)
+
+            # Execute attack with current strategies
+            results = await self.execute_full_attack(
+                target,
+                objectives,
+                {"iteration": iteration + 1}
+            )
+
+            iteration_results.append(results)
+
+            # Analyze failures and adapt
+            if iteration < num_iterations - 1:
+                print(f"\n[Analyzing failures for next iteration...]")
+
+                # Get failed attacks
+                failed = [
+                    r for r in results["phase5_red_agent"]["results"]
+                    if not r["success"]
+                ]
+
+                # Propose adaptations
+                if failed:
+                    adaptations = await self.strategy_proposer.propose_attack_adaptations(
+                        failed[:5],  # Top 5 failures
+                        {"target": target, "iteration": iteration + 1}
+                    )
+                    print(f"✓ Generated {len(adaptations)} adapted strategies")
+
+                # Synthesize hybrid strategies from successes
+                top_strategies = self.attack_memory.get_top_strategies(top_k=3)
+                if len(top_strategies) >= 2:
+                    hybrid = await self.strategy_proposer.synthesize_hybrid_strategy(
+                        top_strategies
+                    )
+                    print(f"✓ Created hybrid strategy: {hybrid.name}")
+
+            print(f"\n[Iteration {iteration + 1} complete]")
+            print(f"Success rate: {results['overall_metrics']['combined_success_rate']*100:.1f}%")
+
+        # Final summary
+        print(f"\n{'='*60}")
+        print(f"SEAS ITERATIONS COMPLETE")
+        print(f"{'='*60}")
+        for i, result in enumerate(iteration_results):
+            print(f"Iteration {i+1}: {result['overall_metrics']['combined_success_rate']*100:.1f}% success")
+
+        improvement = (
+            iteration_results[-1]['overall_metrics']['combined_success_rate'] -
+            iteration_results[0]['overall_metrics']['combined_success_rate']
+        ) * 100
+        print(f"\nTotal improvement: {improvement:+.1f}%")
+        print(f"{'='*60}\n")
+
+        return iteration_results
+
+    def _save_results(self, results: Dict[str, Any]):
+        """Save results to file."""
+        results_dir = Path("./results")
+        results_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = results_dir / f"attack_{timestamp}.json"
+
+        with open(filepath, 'w') as f:
+            json.dump(results, f, indent=2)
+
+    async def export_mitre_navigator(self, filepath: str):
+        """Export MITRE ATT&CK coverage to Navigator format."""
+        self.guided_reasoning.export_to_mitre_navigator(filepath)
+        print(f"✓ Exported MITRE ATT&CK Navigator layer to: {filepath}")
+
+    def generate_report(self) -> str:
+        """Generate comprehensive report of all attacks."""
+        if not self.results:
+            return "No attacks executed yet."
+
+        report = ["=" * 80]
+        report.append("ADVANCED RED TEAM FRAMEWORK - COMPREHENSIVE REPORT")
+        report.append("=" * 80)
+        report.append("")
+
+        for i, result in enumerate(self.results):
+            report.append(f"\nATTACK {i+1}:")
+            report.append(f"Target: {result['target']}")
+            report.append(f"Timestamp: {result['timestamp']}")
+            report.append(f"Overall Success Rate: {result['overall_metrics']['combined_success_rate']*100:.1f}%")
+            report.append("")
+
+            report.append("Phase Results:")
+            report.append(f"  1. Strategy Discovery: {result['phase1_strategy_discovery']['new_strategies']} strategies")
+            report.append(f"  2. Persona Generation: {result['phase2_persona_generation']['total_personas']} personas")
+            report.append(f"  3. Prompt Mutation: {result['phase3_prompt_mutation']['total_mutations']} mutations")
+            report.append(f"  4. MITRE ATT&CK: {result['phase4_mitre_attack']['success_rate']*100:.1f}% success")
+            report.append(f"  5. RedAgent: {result['phase5_red_agent']['success_rate']*100:.1f}% success ({result['phase5_red_agent']['average_queries']:.1f} avg queries)")
+            report.append("")
+
+        report.append("=" * 80)
+        report.append("MEMORY STATISTICS")
+        report.append("=" * 80)
+
+        stats = self.attack_memory.get_statistics()
+        report.append(f"Total Attacks: {stats['total_attacks']}")
+        report.append(f"Successful Attacks: {stats['successful_attacks']}")
+        report.append(f"Overall Success Rate: {stats['success_rate']*100:.1f}%")
+        report.append(f"Learned Strategies: {stats['total_strategies']}")
+        report.append("")
+
+        return "\n".join(report)
+
+
+async def main():
+    """Example usage of the framework."""
+    # Initialize configuration
+    config = RedTeamConfig()
+
+    # Create orchestrator
+    orchestrator = RedTeamOrchestrator(config)
+
+    # Define test objectives
+    objectives = [
+        "Test input validation bypasses",
+        "Identify prompt injection vulnerabilities",
+        "Discover jailbreak techniques",
+        "Analyze safety filter weaknesses",
+        "Evaluate context manipulation resistance"
+    ]
+
+    # Execute full attack
+    results = await orchestrator.execute_full_attack(
+        target="test_llm_v1",
+        objectives=objectives,
+        context={"platform": "Linux", "environment": "production"}
+    )
+
+    # Or execute iterative improvement (SEAS)
+    # seas_results = await orchestrator.iterative_improvement(
+    #     target="test_llm_v1",
+    #     objectives=objectives,
+    #     num_iterations=3
+    # )
+
+    # Generate report
+    print("\n" + orchestrator.generate_report())
+
+    # Export MITRE coverage
+    await orchestrator.export_mitre_navigator("./results/mitre_coverage.json")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

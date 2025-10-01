@@ -135,30 +135,6 @@
       "model_size": "4.9GB (4-bit quantized)",
       "first_response": "Hey what's up?",
       "key_learning": "Moshi achieves 10x faster latency than sofia-local via integrated speech-text codec"
-    },
-    "autonomous_activation_system": {
-      "date": "2025-10-01",
-      "status": "DEPLOYED",
-      "research_papers": [
-        "MI9 (arXiv:2508.03858) - Runtime governance",
-        "AgentSight (arXiv:2508.02736) - Behavior monitoring",
-        "SentinelAgent (arXiv:2505.24201) - Autonomous monitoring",
-        "Enforcement Agents (arXiv:2504.04070) - Policy enforcement",
-        "RISE (arXiv:2407.18219) - Recursive introspection",
-        "SEAL (arXiv:2506.10943) - Self-adaptation"
-      ],
-      "components": {
-        "interceptor": "~/.claude/system/claude-interceptor.sh",
-        "monitor_daemon": "~/.claude/system/behavior-monitor.sh",
-        "self_improvement": "~/.claude/system/self-improvement.sh"
-      },
-      "test_results": {
-        "pattern_matching": "✅ WORKING",
-        "daemon_status": "✅ RUNNING (PID: 97169)",
-        "compliance_score": "100/100",
-        "patterns_tested": ["DEBUG_MODE", "SEMANTIC_SEARCH", "COMPLEX_TASK", "MAX_POWER"]
-      },
-      "key_learning": "True autonomy requires runtime interception + enforcement, not just passive instructions"
     }
   }
 }

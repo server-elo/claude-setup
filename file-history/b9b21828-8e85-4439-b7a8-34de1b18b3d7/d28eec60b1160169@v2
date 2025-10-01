@@ -1,0 +1,91 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   IRCMessage.cpp                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/10/01 20:00:00 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "../include/IRCMessage.hpp"
+#include <sstream>
+
+// Parse IRC message format: [:prefix] COMMAND [params] [:trailing]
+IRCMessage IRCMessage::parse(const std::string& line)
+{
+    IRCMessage msg;
+    std::string remainder = line;
+    size_t pos = 0;
+
+    // Check for prefix (starts with :)
+    if (!remainder.empty() && remainder[0] == ':')
+    {
+        pos = remainder.find(' ');
+        if (pos != std::string::npos)
+        {
+            msg.prefix = remainder.substr(1, pos - 1);
+            remainder = remainder.substr(pos + 1);
+        }
+    }
+
+    // Get command
+    pos = remainder.find(' ');
+    if (pos == std::string::npos)
+    {
+        msg.command = remainder;
+        return msg;
+    }
+
+    msg.command = remainder.substr(0, pos);
+    remainder = remainder.substr(pos + 1);
+
+    // Get parameters
+    while (!remainder.empty())
+    {
+        // Trailing parameter starts with :
+        if (remainder[0] == ':')
+        {
+            msg.trailing = remainder.substr(1);
+            break;
+        }
+
+        // Regular parameter
+        pos = remainder.find(' ');
+        if (pos == std::string::npos)
+        {
+            msg.params.push_back(remainder);
+            break;
+        }
+
+        msg.params.push_back(remainder.substr(0, pos));
+        remainder = remainder.substr(pos + 1);
+    }
+
+    return msg;
+}
+
+// Validate message format
+bool IRCMessage::validate() const
+{
+    // Command must exist and not be empty
+    if (command.empty())
+        return false;
+
+    // Check command is alphanumeric or numeric
+    for (size_t i = 0; i < command.length(); i++)
+    {
+        if (!isalnum(command[i]))
+            return false;
+    }
+
+    return true;
+}
+
+// Check if message has minimum required params
+bool IRCMessage::has_params(size_t count) const
+{
+    return params.size() >= count || (!trailing.empty() && params.size() + 1 >= count);
+}

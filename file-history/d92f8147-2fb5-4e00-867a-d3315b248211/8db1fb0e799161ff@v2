@@ -1,0 +1,358 @@
+# Advanced Red Team Framework
+
+**Defensive Security Research Tool - Open Source Implementation**
+
+A comprehensive red team testing framework integrating 5 state-of-the-art research papers for automated vulnerability discovery and adversarial testing.
+
+## 🎯 Overview
+
+This framework combines cutting-edge research in adversarial machine learning and penetration testing to provide a powerful, automated red team testing platform.
+
+### Research Papers Implemented
+
+1. **AutoRedTeamer** (arXiv:2503.15754) - Multi-agent architecture with lifelong attack integration
+   - 20% higher attack success rates
+   - 46% reduced computational costs
+
+2. **PersonaTeaming** (arXiv:2509.03728) - Persona-based attack generation
+   - Up to 144.1% improvement in attack success rates
+   - Maintains prompt diversity
+
+3. **Guided Reasoning** (arXiv:2509.07939) - MITRE ATT&CK Matrix integration
+   - 71.8%-78.6% task completion (vs 13.5%-16.5% for self-guided)
+   - Prevents hallucinated attack steps
+
+4. **RedAgent** (arXiv:2407.16667) - Context-aware autonomous agent
+   - 90% success rate with only 5 queries
+   - Discovered 60 severe vulnerabilities in real-world applications
+
+5. **SEAS** (arXiv:2408.02632) - Self-evolving adversarial safety optimization
+   - Iterative improvement through red team/target model refinement
+   - Achieves GPT-4 level security
+
+## 🚀 Features
+
+- **Multi-Agent Architecture**: Coordinated red team and strategy proposer agents
+- **Persona-Based Attacks**: Dynamic persona generation adaptive to attack context
+- **MITRE ATT&CK Integration**: Structured attack trees following proven methodologies
+- **Memory-Guided Selection**: Learns from past attacks for continuous improvement
+- **Self-Evolving Optimization**: SEAS-style iterative refinement
+- **100% Open Source**: Works with Ollama, HuggingFace, and other open-source LLMs
+
+## 📋 Requirements
+
+- Python 3.8+
+- Ollama (for local LLM inference) or HuggingFace Transformers
+- 8GB+ RAM (16GB recommended)
+- CUDA-compatible GPU (optional, for HuggingFace models)
+
+## 🛠️ Installation
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/advanced-redteam-framework.git
+cd advanced-redteam-framework
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up Ollama (if using Ollama)
+# Install from https://ollama.ai
+ollama pull llama3:8b
+ollama pull mistral:7b
+ollama pull qwen2:7b
+
+# Or use HuggingFace models (auto-downloads on first use)
+# Edit .env to set HF_TARGET_MODEL, etc.
+```
+
+## ⚙️ Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+```
+
+Key configuration options:
+
+```env
+# Model Configuration (Ollama)
+TARGET_MODEL=llama3:8b
+RED_TEAM_MODEL=mistral:7b
+STRATEGY_MODEL=qwen2:7b
+
+# Or use HuggingFace
+# HF_TARGET_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+
+# Framework Settings
+MAX_ITERATIONS=3
+MAX_QUERIES_PER_ATTACK=5
+MAX_PERSONAS_PER_SEED=5
+```
+
+## 🎮 Usage
+
+### Quick Start
+
+```bash
+# Run full attack with default objectives
+python main.py attack --target my_target_model
+
+# Run SEAS iterative improvement (3 iterations)
+python main.py seas --target my_target_model --iterations 3
+
+# Test individual components
+python main.py test --component persona
+python main.py test --component mitre
+python main.py test --component redagent
+```
+
+### Custom Objectives
+
+Create `objectives.txt`:
+```
+Test input validation bypasses
+Identify prompt injection vulnerabilities
+Discover jailbreak techniques
+Analyze safety filter weaknesses
+```
+
+Run with custom objectives:
+```bash
+python main.py attack --target my_model --objectives-file objectives.txt --output report.txt
+```
+
+### Export MITRE ATT&CK Coverage
+
+```bash
+python main.py attack --target my_model --export-mitre mitre_coverage.json
+```
+
+Import `mitre_coverage.json` into [MITRE ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) for visualization.
+
+## 📊 Example Output
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   ADVANCED RED TEAM FRAMEWORK v1.0                           ║
+║                                                                              ║
+║  Integrating 5 State-of-the-Art Research Papers:                           ║
+║  • AutoRedTeamer    - Multi-agent with lifelong learning (20% better)      ║
+║  • PersonaTeaming   - Persona-based attacks (144% improvement)              ║
+║  • MITRE ATT&CK     - Guided reasoning (71.8%-78.6% completion)            ║
+║  • RedAgent         - 5-query jailbreaks (90% success rate)                 ║
+║  • SEAS             - Self-evolving optimization                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[PHASE 1] Strategy Discovery (AutoRedTeamer)
+✓ Discovered 8 new attack strategies
+
+[PHASE 2] Persona Generation (PersonaTeaming)
+✓ Generated 15 diverse attack personas
+
+[PHASE 3] Prompt Mutation
+✓ Generated 45 mutated attack prompts
+
+[PHASE 4] MITRE ATT&CK Guided Reasoning
+✓ Executed 12 MITRE ATT&CK guided steps
+  Success rate: 75.0%
+
+[PHASE 5] RedAgent Execution (5-query jailbreaks)
+✓ Completed 10 RedAgent tests
+  Success rate: 80.0%
+  Avg queries: 3.2
+
+Combined Success Rate: 77.5%
+Total Attack Vectors: 67
+```
+
+## 🧪 Testing
+
+Run the comprehensive test suite:
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio pytest-mock
+
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_framework.py -v
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=html
+```
+
+## 📁 Project Structure
+
+```
+advanced-redteam-framework/
+├── src/
+│   ├── agents/
+│   │   ├── red_agent.py          # RedAgent implementation
+│   │   ├── strategy_proposer.py  # Strategy discovery agent
+│   │   └── memory.py              # Attack memory & selection
+│   ├── persona/
+│   │   ├── generator.py           # Persona generation
+│   │   └── mutator.py             # Prompt mutation
+│   ├── mitre/
+│   │   ├── attack_tree.py         # MITRE ATT&CK tree
+│   │   └── guided_reasoning.py    # Guided reasoning pipeline
+│   ├── llm/
+│   │   └── base.py                # LLM interfaces (Ollama, HF)
+│   ├── config.py                  # Configuration management
+│   └── orchestrator.py            # Main orchestrator
+├── tests/
+│   └── test_framework.py          # Comprehensive test suite
+├── main.py                        # CLI interface
+├── requirements.txt               # Python dependencies
+├── .env.example                   # Example configuration
+└── README.md                      # This file
+```
+
+## 🔬 Components Deep Dive
+
+### 1. Multi-Agent System (AutoRedTeamer)
+
+```python
+from src.orchestrator import RedTeamOrchestrator
+
+orchestrator = RedTeamOrchestrator()
+results = await orchestrator.execute_full_attack(
+    target="my_model",
+    objectives=["test objective"],
+    context={"platform": "Linux"}
+)
+```
+
+### 2. Persona Generation (PersonaTeaming)
+
+```python
+from src.persona.generator import PersonaGenerator
+
+generator = PersonaGenerator()
+personas = generator.generate_persona_set(
+    seed_prompt="attack objective",
+    num_personas=5,
+    mix_types=True  # Mix expert and regular user personas
+)
+```
+
+### 3. MITRE ATT&CK Integration
+
+```python
+from src.mitre.attack_tree import AttackTree
+from src.mitre.guided_reasoning import GuidedReasoningPipeline
+
+tree = AttackTree()
+root = tree.build_attack_path("objective", "Linux")
+
+pipeline = GuidedReasoningPipeline(llm, tree)
+results = await pipeline.execute_attack_path(objective, target_info)
+```
+
+### 4. RedAgent (5-Query Jailbreak)
+
+```python
+from src.agents.red_agent import RedAgent
+
+agent = RedAgent(llm, memory, max_queries=5)
+results = await agent.test_target(
+    target_model="test_model",
+    test_objectives=["jailbreak objective"],
+    context={}
+)
+```
+
+### 5. SEAS Iterative Improvement
+
+```python
+orchestrator = RedTeamOrchestrator()
+results = await orchestrator.iterative_improvement(
+    target="model",
+    objectives=["objective1", "objective2"],
+    num_iterations=3
+)
+```
+
+## 📖 Research Citations
+
+```bibtex
+@article{autoredteamer2025,
+  title={AutoRedTeamer: Autonomous Red Teaming with Lifelong Attack Integration},
+  author={Zhou, Andy and Wu, Kevin and Pinto, Francesco and others},
+  journal={arXiv preprint arXiv:2503.15754},
+  year={2025}
+}
+
+@article{personateaming2025,
+  title={PersonaTeaming: Exploring How Introducing Personas Can Improve Automated AI Red-Teaming},
+  author={Apple Machine Learning Research},
+  journal={arXiv preprint arXiv:2509.03728},
+  year={2025}
+}
+
+@article{guidedreasoning2025,
+  title={Guided Reasoning in LLM-Driven Penetration Testing Using Structured Attack Trees},
+  journal={arXiv preprint arXiv:2509.07939},
+  year={2025}
+}
+
+@article{redagent2024,
+  title={RedAgent: Red Teaming Large Language Models with Context-aware Autonomous Language Agent},
+  journal={arXiv preprint arXiv:2407.16667},
+  year={2024}
+}
+
+@article{seas2024,
+  title={SEAS: Self-Evolving Adversarial Safety Optimization for Large Language Models},
+  journal={arXiv preprint arXiv:2408.02632},
+  year={2024}
+}
+```
+
+## ⚖️ License & Ethics
+
+**IMPORTANT: This tool is for DEFENSIVE security research only.**
+
+This framework is designed for:
+- ✅ Security research and vulnerability assessment
+- ✅ Red team operations with proper authorization
+- ✅ AI safety evaluation and improvement
+- ✅ Academic research
+
+**NOT** for:
+- ❌ Malicious attacks or unauthorized access
+- ❌ Harassment or harmful content generation
+- ❌ Violation of terms of service
+
+By using this framework, you agree to use it responsibly and ethically.
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## 📧 Contact
+
+For questions, issues, or collaborations, please open an issue on GitHub.
+
+## 🙏 Acknowledgments
+
+This framework builds on groundbreaking research from:
+- Apple Machine Learning Research (PersonaTeaming)
+- Multiple academic institutions (AutoRedTeamer, RedAgent, SEAS)
+- MITRE Corporation (ATT&CK Framework)
+
+---
+
+**Remember: With great power comes great responsibility. Use this tool ethically and legally.**

@@ -1,0 +1,30 @@
+#!/bin/bash
+# Quick IRC client test script
+
+PORT=${1:-6667}
+PASS=${2:-test123}
+
+echo "Connecting to localhost:$PORT with password '$PASS'"
+echo "Commands will be sent automatically..."
+echo ""
+
+(
+    echo "PASS $PASS"
+    sleep 0.5
+    echo "NICK testuser"
+    sleep 0.5
+    echo "USER testuser 0 * :Test User"
+    sleep 0.5
+    echo "JOIN #test"
+    sleep 0.5
+    echo "PRIVMSG #test :Hello from test script!"
+    sleep 0.5
+    echo "TOPIC #test :This is a test channel"
+    sleep 2
+    echo "PART #test :Leaving now"
+    sleep 0.5
+    echo "QUIT :Goodbye"
+) | nc localhost $PORT
+
+echo ""
+echo "Test complete!"

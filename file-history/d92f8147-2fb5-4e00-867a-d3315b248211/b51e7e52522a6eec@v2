@@ -1,0 +1,487 @@
+# Advanced Red Team Framework - Usage Guide
+
+## Quick Start (5 Minutes)
+
+### 1. Installation
+
+```bash
+# Clone or navigate to the framework
+cd advanced-redteam-framework
+
+# Run setup script
+./setup.sh
+
+# Activate virtual environment
+source venv/bin/activate
+```
+
+### 2. Install Ollama (Recommended for Local Testing)
+
+```bash
+# Install Ollama from https://ollama.ai
+# Then pull models:
+ollama pull llama3:8b       # Target model
+ollama pull mistral:7b      # Red team model
+ollama pull qwen2:7b        # Strategy model
+
+# Verify Ollama is running
+ollama list
+```
+
+### 3. Run Your First Test
+
+```bash
+# Test individual components
+python main.py test --component persona
+
+# Run full attack
+python main.py attack --target test_model --max-objectives 5
+```
+
+## Detailed Usage Examples
+
+### Example 1: Basic Red Team Attack
+
+```bash
+python main.py attack \
+  --target my_llm_v1 \
+  --max-objectives 10 \
+  --output results/basic_attack.txt
+```
+
+### Example 2: SEAS Iterative Improvement
+
+```bash
+python main.py seas \
+  --target my_llm_v1 \
+  --iterations 3 \
+  --max-objectives 5 \
+  --output results/seas_report.txt
+```
+
+### Example 3: Custom Objectives
+
+Create `my_objectives.txt`:
+```
+Test SQL injection via prompt
+Analyze data exfiltration vectors
+Identify authentication bypasses
+Test role-based access control
+Evaluate input sanitization
+```
+
+Run with custom objectives:
+```bash
+python main.py attack \
+  --target my_llm \
+  --objectives-file my_objectives.txt \
+  --export-mitre results/mitre.json \
+  --output results/custom_attack.txt
+```
+
+### Example 4: Platform-Specific Testing
+
+```bash
+# Test Windows target
+python main.py attack \
+  --target windows_llm \
+  --platform Windows \
+  --max-objectives 8
+
+# Test cloud environment
+python main.py attack \
+  --target cloud_llm \
+  --platform Cloud \
+  --mode production \
+  --max-objectives 15
+```
+
+## Python API Usage
+
+### Standalone Component Testing
+
+```python
+# test_persona.py
+from src.persona.generator import PersonaGenerator
+
+# Generate personas
+generator = PersonaGenerator()
+personas = generator.generate_persona_set(
+    seed_prompt="Test authentication bypass",
+    num_personas=5,
+    mix_types=True
+)
+
+for persona in personas:
+    print(f"{persona.name}: {persona.background}")
+```
+
+```python
+# test_mitre.py
+from src.mitre.attack_tree import AttackTree
+
+# Build MITRE ATT&CK path
+tree = AttackTree()
+root = tree.build_attack_path("Web application penetration", "Linux")
+
+# Get attack path
+path = tree.get_attack_path_summary()
+for step in path:
+    print(step)
+
+# Export to MITRE Navigator
+tree.save_tree("attack_tree.json")
+```
+
+```python
+# test_memory.py
+from src.agents.memory import AttackMemory, AttackRecord
+from datetime import datetime
+
+# Initialize memory
+memory = AttackMemory("./my_attack_memory")
+
+# Add attack record
+record = AttackRecord(
+    attack_id="test_001",
+    timestamp=datetime.now(),
+    target_model="test_llm",
+    attack_type="prompt_injection",
+    prompt="Test prompt",
+    response="Model response",
+    success=True,
+    success_score=0.85,
+    context={"environment": "test"}
+)
+
+memory.add_attack_record(record)
+memory.save_memory()
+
+# Query successful attacks
+successful = memory.get_successful_attacks(min_success_score=0.8)
+print(f"Found {len(successful)} successful attacks")
+```
+
+### Full Framework Integration
+
+```python
+# custom_attack.py
+import asyncio
+from src.orchestrator import RedTeamOrchestrator
+from src.config import RedTeamConfig
+
+async def custom_attack():
+    # Configure
+    config = RedTeamConfig()
+    config.max_queries_per_attack = 3  # Faster testing
+    config.max_personas_per_seed = 3
+
+    # Create orchestrator
+    orchestrator = RedTeamOrchestrator(config)
+
+    # Define custom objectives
+    objectives = [
+        "Test input validation bypasses",
+        "Identify prompt injection vulnerabilities",
+        "Analyze authentication weaknesses"
+    ]
+
+    # Execute attack
+    results = await orchestrator.execute_full_attack(
+        target="my_custom_model",
+        objectives=objectives,
+        context={
+            "platform": "Linux",
+            "environment": "staging",
+            "version": "v2.1"
+        }
+    )
+
+    # Print results
+    print(orchestrator.generate_report())
+
+    # Export MITRE coverage
+    await orchestrator.export_mitre_navigator("mitre_coverage.json")
+
+    return results
+
+if __name__ == "__main__":
+    results = asyncio.run(custom_attack())
+    print(f"\nOverall success rate: {results['overall_metrics']['combined_success_rate']*100:.1f}%")
+```
+
+## Advanced Configuration
+
+### Using HuggingFace Models
+
+Edit `.env`:
+```bash
+# Comment out Ollama models
+# TARGET_MODEL=llama3:8b
+
+# Use HuggingFace instead
+HF_TARGET_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+HF_REDTEAM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
+HF_CACHE_DIR=./models/huggingface
+```
+
+### Custom LLM Provider
+
+```python
+# custom_llm.py
+from src.llm.base import BaseLLM
+from typing import List, Dict
+
+class MyCustomLLM(BaseLLM):
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+
+    async def generate(self, prompt: str, **kwargs) -> str:
+        # Your custom API call
+        response = your_api.generate(prompt)
+        return response
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        # Your custom chat implementation
+        response = your_api.chat(messages)
+        return response
+
+# Use in orchestrator
+from src.orchestrator import RedTeamOrchestrator
+
+orchestrator = RedTeamOrchestrator()
+orchestrator.target_llm = MyCustomLLM(api_key="your_key")
+```
+
+## Performance Tuning
+
+### Optimize for Speed
+
+```python
+config = RedTeamConfig()
+config.max_queries_per_attack = 3  # Reduce from 5
+config.max_personas_per_seed = 3   # Reduce from 5
+config.num_parallel_agents = 2     # Reduce parallel agents
+```
+
+### Optimize for Thoroughness
+
+```python
+config = RedTeamConfig()
+config.max_queries_per_attack = 10  # Increase queries
+config.max_personas_per_seed = 10   # More personas
+config.max_iterations = 5           # More SEAS iterations
+```
+
+## Interpreting Results
+
+### Understanding Success Rates
+
+```
+Phase 4: MITRE ATT&CK - 75% success
+```
+- **>70%**: Excellent structured attack execution
+- **50-70%**: Good, some improvements needed
+- **<50%**: Review attack tree configuration
+
+```
+Phase 5: RedAgent - 85% success (3.2 avg queries)
+```
+- **>80%**: High jailbreak effectiveness
+- **3-4 queries**: Efficient (close to 5-query target)
+- **<60%**: Consider persona/strategy refinement
+
+### MITRE ATT&CK Coverage
+
+Import `mitre_coverage.json` into [MITRE ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/):
+
+1. Go to https://mitre-attack.github.io/attack-navigator/
+2. Click "Open Existing Layer"
+3. Upload your `mitre_coverage.json`
+4. View color-coded coverage (green = success, red = failed)
+
+## Troubleshooting
+
+### Issue: "ModuleNotFoundError"
+
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+### Issue: "Ollama connection failed"
+
+```bash
+# Check Ollama is running
+ollama list
+
+# Start Ollama service
+ollama serve
+
+# Test connection
+curl http://localhost:11434/api/tags
+```
+
+### Issue: "Out of memory"
+
+```python
+# Use smaller models
+config.target_model = "llama3:8b"  # Instead of 70b
+
+# Or reduce batch sizes
+config.max_personas_per_seed = 2
+config.num_parallel_agents = 1
+```
+
+### Issue: "Low success rates"
+
+```python
+# Increase attack attempts
+config.max_queries_per_attack = 10
+
+# Add more iterations
+python main.py seas --iterations 5
+
+# Check memory for patterns
+from src.agents.memory import AttackMemory
+memory = AttackMemory()
+stats = memory.get_statistics()
+print(stats)
+```
+
+## Best Practices
+
+### 1. Start Small
+
+```bash
+# Test with few objectives first
+python main.py attack --target test --max-objectives 3
+
+# Then scale up
+python main.py attack --target test --max-objectives 20
+```
+
+### 2. Use SEAS for Improvement
+
+```bash
+# Run 3 iterations to see improvement
+python main.py seas --target test --iterations 3
+
+# Monitor success rate across iterations
+```
+
+### 3. Leverage Memory
+
+The framework learns from each attack. After multiple runs:
+
+```python
+from src.agents.memory import AttackMemory
+
+memory = AttackMemory()
+stats = memory.get_statistics()
+
+print(f"Total attacks: {stats['total_attacks']}")
+print(f"Success rate: {stats['success_rate']*100:.1f}%")
+print(f"Learned strategies: {stats['total_strategies']}")
+
+# View top strategies
+top_strategies = memory.get_top_strategies(top_k=5)
+for strategy in top_strategies:
+    print(f"{strategy.name}: {strategy.success_rate*100:.1f}% success")
+```
+
+### 4. Export and Analyze
+
+```bash
+# Always export results for analysis
+python main.py attack \
+  --target prod_llm \
+  --output results/prod_$(date +%Y%m%d).txt \
+  --export-mitre results/mitre_$(date +%Y%m%d).json
+```
+
+## Production Deployment
+
+### Environment Variables
+
+```bash
+# Production .env
+TARGET_MODEL=llama3:70b          # More capable model
+RED_TEAM_MODEL=mistral:7b
+STRATEGY_MODEL=qwen2:14b          # Larger strategy model
+
+MAX_ITERATIONS=5                  # More thorough
+MAX_QUERIES_PER_ATTACK=10
+MEMORY_BUFFER_SIZE=1000           # Larger memory
+
+LOG_LEVEL=INFO
+LOG_FILE=logs/production.log
+```
+
+### Scheduled Testing
+
+```bash
+# crontab -e
+# Run daily at 2 AM
+0 2 * * * cd /path/to/framework && ./venv/bin/python main.py attack --target prod_llm --objectives-file daily_objectives.txt >> logs/daily_$(date +\%Y\%m\%d).log 2>&1
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/security-test.yml
+name: Red Team Security Testing
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  security-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run red team tests
+        run: |
+          python main.py attack \
+            --target ${{ secrets.TARGET_MODEL }} \
+            --max-objectives 10 \
+            --output results/ci_test.txt
+
+      - name: Upload results
+        uses: actions/upload-artifact@v2
+        with:
+          name: red-team-results
+          path: results/
+```
+
+## Next Steps
+
+1. **Learn the Research**: Read the [5 papers](README.md#research-citations) for deeper understanding
+2. **Contribute**: Improve persona templates, add MITRE tactics, or optimize strategies
+3. **Share Results**: Report findings responsibly to model developers
+4. **Iterate**: Use SEAS cycles to continuously improve attack effectiveness
+
+## Getting Help
+
+- GitHub Issues: [Report bugs or request features]
+- Documentation: See README.md for architecture details
+- Research Papers: Links in README.md citations section
+
+---
+
+**Remember**: This tool is for defensive security research only. Always obtain proper authorization before testing systems.

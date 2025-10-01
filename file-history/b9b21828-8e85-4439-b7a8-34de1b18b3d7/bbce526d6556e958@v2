@@ -1,0 +1,111 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/09/26 15:22:31 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#pragma once
+
+#include <iostream>
+#include <string>
+#include <map>
+#include <vector>
+#include <cstring>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <csignal>
+#include <ctime>
+
+#include "Client.hpp"
+#include "Channel.hpp"
+#include "IRCMessage.hpp"
+
+#ifndef MAX_CLIENTS
+#define MAX_CLIENTS 100
+#endif
+
+#ifndef MAX_BUFF
+#define MAX_BUFF 512
+#endif
+
+class Server
+{
+private:
+    int port;
+    std::string password;
+    int listening;
+    sockaddr_in hint;
+    std::vector<pollfd> poll_fds;
+
+    // Client management
+    std::map<int, Client*> clients;                    // fd -> Client
+    std::map<std::string, Client*> clients_by_nick;    // nickname -> Client
+
+    // Channel management
+    std::map<std::string, Channel*> channels;          // channel name -> Channel
+
+    // Server state
+    bool running;
+    time_t start_time;
+
+    // Socket operations
+    bool createSocket();
+    bool bindSocket();
+    bool listenSocket();
+    bool init_poll();
+
+    // Client handling
+    void handle_new_host();
+    void handle_messages(size_t index);
+    void handle_disconnection(size_t index);
+    void remove_from_vector(size_t index);
+    void cleanup_client(int fd);
+
+    // IRC command handlers
+    void handle_command(Client* client, const IRCMessage& msg);
+    void handle_PASS(Client* client, const IRCMessage& msg);
+    void handle_NICK(Client* client, const IRCMessage& msg);
+    void handle_USER(Client* client, const IRCMessage& msg);
+    void handle_JOIN(Client* client, const IRCMessage& msg);
+    void handle_PART(Client* client, const IRCMessage& msg);
+    void handle_PRIVMSG(Client* client, const IRCMessage& msg);
+    void handle_QUIT(Client* client, const IRCMessage& msg);
+    void handle_KICK(Client* client, const IRCMessage& msg);
+    void handle_INVITE(Client* client, const IRCMessage& msg);
+    void handle_TOPIC(Client* client, const IRCMessage& msg);
+    void handle_MODE(Client* client, const IRCMessage& msg);
+    void handle_PING(Client* client, const IRCMessage& msg);
+
+    // Helper functions
+    void send_reply(Client* client, const std::string& reply);
+    void send_welcome(Client* client);
+    void send_names(Client* client, Channel* channel);
+    bool is_valid_nickname(const std::string& nick) const;
+    bool is_valid_channel_name(const std::string& name) const;
+    Channel* get_or_create_channel(const std::string& name);
+    void remove_empty_channels();
+
+public:
+    Server(int port, const std::string& password);
+    Server(const Server& other);
+    Server& operator=(const Server& other);
+    ~Server();
+
+    void run_Server();
+    void shutdown_server();
+
+    // Static signal handler helper
+    static volatile sig_atomic_t signal_received;
+    static void signal_handler(int signum);
+};

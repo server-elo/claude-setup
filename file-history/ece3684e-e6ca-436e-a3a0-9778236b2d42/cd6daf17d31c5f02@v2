@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""
+Interactive Chat with Sofia M3
+Speak with German female receptionist using M3 GPU acceleration
+"""
+import sys
+import pyaudio
+import wave
+import tempfile
+from loguru import logger
+
+from src.voice.stt_optimized import OptimizedSpeechToText
+from src.voice.llm import LanguageModel
+from src.voice.tts_encodec_m3 import TextToSpeech
+
+
+class InteractiveSofiaM3:
+    """
+    Interactive voice chat with Sofia M3
+    Record → STT → LLM → TTS (M3 voice clone) → Play
+    """
+
+    def __init__(self):
+        logger.info("="*60)
+        logger.info("🎙️  SOFIA M3 - Interactive Voice Chat")
+        logger.info("="*60)
+
+        # Load components
+        logger.info("\n📥 Loading components...")
+        self.stt = OptimizedSpeechToText(language="de", model_size="base")
+        self.llm = LanguageModel(model="gemma2:2b")
+        self.tts = TextToSpeech()
+
+        # Voice settings
+        self.receptionist_voice = "receptionist_voice_katja.wav"
+        self.system_prompt = """Du bist Sofia, eine freundliche Hotel-Rezeptionistin.
+Antworte kurz, hilfsbereit und professionell auf Deutsch.
+Halte deine Antworten kurz (1-3 Sätze)."""
+
+        # Audio settings
+        self.CHUNK = 1024
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
+        self.RATE = 16000
+
+        self.audio = pyaudio.PyAudio()
+
+        logger.success("\n✅ Sofia M3 ready!")
+        logger.info(f"   Voice: German Female Receptionist (Katja)")
+        logger.info(f"   Device: M3 GPU (Metal)")
+
+    def record_audio(self, duration=5):
+        """Record audio from microphone"""
+        logger.info(f"\n🎤 Recording for {duration} seconds...")
+        logger.info("   Speak now!")
+
+        stream = self.audio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            input=True,
+            frames_per_buffer=self.CHUNK
+        )
+
+        frames = []
+        for i in range(0, int(self.RATE / self.CHUNK * duration)):
+            data = stream.read(self.CHUNK)
+            frames.append(data)
+
+        stream.stop_stream()
+        stream.close()
+
+        logger.success("   ✅ Recording complete!")
+
+        # Convert to bytes
+        audio_data = b''.join(frames)
+        return audio_data
+
+    def play_audio(self, audio_data):
+        """Play audio response"""
+        logger.info("\n🔊 Playing response...")
+
+        stream = self.audio.open(
+            format=self.FORMAT,
+            channels=self.CHANNELS,
+            rate=self.RATE,
+            output=True
+        )
+
+        stream.write(audio_data)
+        stream.stop_stream()
+        stream.close()
+
+        logger.success("   ✅ Playback complete!")
+
+    def process_conversation(self, audio_data):
+        """Process one conversation turn"""
+        import time
+
+        logger.info("\n" + "="*60)
+        logger.info("PROCESSING")
+        logger.info("="*60)
+
+        # 1. STT
+        logger.info("\n[1/3] 🎤 Speech-to-Text...")
+        start = time.time()
+        text = self.stt.transcribe(audio_data)
+        stt_time = (time.time() - start) * 1000
+
+        if not text or len(text.strip()) == 0:
+            logger.warning("   ⚠️  No speech detected")
+            return None
+
+        logger.success(f"   ✅ Transcribed ({stt_time:.0f}ms)")
+        logger.info(f"   📝 You: '{text}'")
+
+        # 2. LLM
+        logger.info("\n[2/3] 🤔 Thinking...")
+        start = time.time()
+        response = self.llm.chat(text, system_prompt=self.system_prompt)
+        llm_time = (time.time() - start) * 1000
+
+        logger.success(f"   ✅ Response generated ({llm_time:.0f}ms)")
+        logger.info(f"   💬 Sofia: '{response}'")
+
+        # 3. TTS (M3 Voice Clone)
+        logger.info("\n[3/3] 🎙️  Text-to-Speech (M3 voice clone)...")
+        start = time.time()
+        audio = self.tts.synthesize_with_voice(response, self.receptionist_voice)
+        tts_time = (time.time() - start) * 1000
+
+        logger.success(f"   ✅ Voice synthesized ({tts_time:.0f}ms)")
+
+        # Summary
+        total_time = stt_time + llm_time + tts_time
+        logger.info("\n" + "="*60)
+        logger.info("PERFORMANCE")
+        logger.info("="*60)
+        logger.info(f"   STT: {stt_time:.0f}ms")
+        logger.info(f"   LLM: {llm_time:.0f}ms")
+        logger.info(f"   TTS: {tts_time:.0f}ms (M3 GPU)")
+        logger.info(f"   ─────────────")
+        logger.info(f"   TOTAL: {total_time:.0f}ms")
+
+        return audio
+
+    def run(self):
+        """Run interactive chat loop"""
+        logger.info("\n" + "="*60)
+        logger.info("INSTRUCTIONS")
+        logger.info("="*60)
+        logger.info("\n1. Press ENTER to start recording")
+        logger.info("2. Speak in German (5 seconds)")
+        logger.info("3. Sofia will respond with M3 voice")
+        logger.info("4. Type 'quit' to exit\n")
+
+        try:
+            while True:
+                # Wait for user
+                user_input = input("\n🎤 Press ENTER to speak (or 'quit' to exit): ").strip().lower()
+
+                if user_input == 'quit':
+                    logger.info("\n👋 Goodbye!")
+                    break
+
+                # Record
+                audio_data = self.record_audio(duration=5)
+
+                # Process
+                response_audio = self.process_conversation(audio_data)
+
+                if response_audio:
+                    # Play
+                    self.play_audio(response_audio)
+
+        except KeyboardInterrupt:
+            logger.info("\n\n👋 Interrupted. Goodbye!")
+        finally:
+            self.cleanup()
+
+    def cleanup(self):
+        """Cleanup resources"""
+        self.audio.terminate()
+        logger.info("\n✅ Resources cleaned up")
+
+
+def main():
+    """Main entry point"""
+    try:
+        sofia = InteractiveSofiaM3()
+        sofia.run()
+    except Exception as e:
+        logger.error(f"\n❌ Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

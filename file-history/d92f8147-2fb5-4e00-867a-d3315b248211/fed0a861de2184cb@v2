@@ -1,0 +1,52 @@
+#!/bin/bash
+# Setup script for Advanced Red Team Framework
+
+echo "========================================="
+echo "Advanced Red Team Framework Setup"
+echo "========================================="
+
+# Create virtual environment
+echo "\n[1/5] Creating virtual environment..."
+python3 -m venv venv
+
+# Activate virtual environment
+echo "\n[2/5] Activating virtual environment..."
+source venv/bin/activate
+
+# Upgrade pip
+echo "\n[3/5] Upgrading pip..."
+pip install --upgrade pip
+
+# Install dependencies
+echo "\n[4/5] Installing dependencies..."
+pip install -r requirements.txt
+
+# Create necessary directories
+echo "\n[5/5] Creating data directories..."
+mkdir -p data/attack_memory
+mkdir -p data/strategy_memory
+mkdir -p data/vectorstore
+mkdir -p data/mitre_attack
+mkdir -p logs
+mkdir -p results
+
+# Copy environment file
+if [ ! -f .env ]; then
+    echo "\nCopying .env.example to .env..."
+    cp .env.example .env
+    echo "⚠️  Please edit .env to configure your models"
+fi
+
+echo "\n========================================="
+echo "✓ Setup complete!"
+echo "========================================="
+echo ""
+echo "Next steps:"
+echo "1. Activate virtual environment: source venv/bin/activate"
+echo "2. Configure .env file with your model preferences"
+echo "3. If using Ollama:"
+echo "   - Install Ollama from https://ollama.ai"
+echo "   - Pull models: ollama pull llama3:8b"
+echo "4. Run tests: python -m pytest tests/ -v"
+echo "5. Run framework: python main.py attack --target test_model"
+echo ""

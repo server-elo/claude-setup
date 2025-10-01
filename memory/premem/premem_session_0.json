@@ -1,0 +1,32 @@
+{
+  "session_id": 0,
+  "turn_id": 1,
+  "memories": [
+    {
+      "raw_user": "Hallo, hallo, rest um mich.",
+      "raw_assistant": "Guten Tag, Herr/Frau [Name].  Schön, dass Sie anrufen. Wie kann ich Ihnen heute helfen? \n",
+      "entities": [
+        "Guten Tag (MISC)"
+      ],
+      "intent": "greeting",
+      "facts": [],
+      "summary": "Guten Tag, Herr/Frau [Name].",
+      "keywords": [
+        "helfen",
+        "]",
+        "resen",
+        "[",
+        "schön",
+        "herr",
+        "name",
+        "frau",
+        "hallo",
+        "anrufen"
+      ],
+      "timestamp": 1759324921.1848161,
+      "session_id": 0,
+      "turn_id": 0,
+      "indexed": true
+    }
+  ]
+}

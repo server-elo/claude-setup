@@ -1,0 +1,55 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.cpp                                           :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/09/20 17:53:43 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "../include/Server.hpp"
+#include <iostream>
+#include <cstdlib>
+
+int main(int argc, char **argv)
+{
+    if (argc != 3)
+    {
+        std::cerr << "Usage: " << argv[0] << " <port> <password>\n";
+        std::cerr << "Example: " << argv[0] << " 6667 mypassword\n";
+        return 1;
+    }
+
+    // Parse port
+    int port = std::atoi(argv[1]);
+    if (port <= 0 || port > 65535)
+    {
+        std::cerr << "Error: Invalid port number (must be 1-65535)\n";
+        return 1;
+    }
+
+    // Get password
+    std::string password = argv[2];
+    if (password.empty())
+    {
+        std::cerr << "Error: Password cannot be empty\n";
+        return 1;
+    }
+
+    std::cout << "===================================\n";
+    std::cout << "       ft_irc Server v1.0\n";
+    std::cout << "===================================\n";
+    std::cout << "Port: " << port << "\n";
+    std::cout << "Password: " << (password.length() > 0 ? "***" : "(none)") << "\n";
+    std::cout << "Max clients: " << MAX_CLIENTS << "\n";
+    std::cout << "===================================\n\n";
+
+    // Create and run server
+    Server server(port, password);
+    server.run_Server();
+
+    return 0;
+}

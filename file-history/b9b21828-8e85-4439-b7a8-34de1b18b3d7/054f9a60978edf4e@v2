@@ -1,0 +1,77 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channel.hpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tndreka <tndreka@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/10/01 20:00:00 by tndreka           #+#    #+#             */
+/*   Updated: 2025/10/01 20:00:00 by tndreka          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#pragma once
+
+#include <string>
+#include <vector>
+#include <algorithm>
+#include "Client.hpp"
+
+class Channel
+{
+private:
+    std::string name;
+    std::string topic;
+    std::string key;                    // Channel password (+k mode)
+    std::vector<Client*> members;
+    std::vector<Client*> operators;
+    std::vector<Client*> invited;       // Invite list for +i mode
+    size_t user_limit;                  // 0 = no limit
+    bool invite_only;                   // +i mode
+    bool topic_protected;               // +t mode (only ops can change topic)
+
+public:
+    Channel(const std::string& name);
+    ~Channel();
+
+    // Getters
+    std::string get_name() const;
+    std::string get_topic() const;
+    std::string get_key() const;
+    const std::vector<Client*>& get_members() const;
+    size_t get_user_count() const;
+    size_t get_user_limit() const;
+    bool is_invite_only() const;
+    bool is_topic_protected() const;
+
+    // Setters
+    void set_topic(const std::string& topic);
+    void set_key(const std::string& key);
+    void set_user_limit(size_t limit);
+    void set_invite_only(bool value);
+    void set_topic_protected(bool value);
+
+    // Member management
+    void add_member(Client* client);
+    void remove_member(Client* client);
+    bool has_member(Client* client) const;
+
+    // Operator management
+    void add_operator(Client* client);
+    void remove_operator(Client* client);
+    bool is_operator(Client* client) const;
+
+    // Invite management
+    void add_invite(Client* client);
+    void remove_invite(Client* client);
+    bool is_invited(Client* client) const;
+
+    // Broadcasting
+    void broadcast(const std::string& message, Client* except = NULL);
+
+    // Get modes string (+nt, +i, etc)
+    std::string get_modes() const;
+
+    // Get user list for NAMES command
+    std::string get_names_list() const;
+};
